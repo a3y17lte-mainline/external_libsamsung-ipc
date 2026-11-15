@@ -229,12 +229,12 @@ int herolte_boot(struct ipc_client *client)
 
 	ipc_client_log(client, "Loaded firmware TOC");
 
-	nvfd = open(herolte_nv_data_specs.nv_data_path, O_RDONLY | O_NOCTTY);
+	nvfd = open(ipc_client_nv_data_path(client), O_RDONLY | O_NOCTTY);
 	if (nvfd == -1) {
 		rc = errno;
 		ipc_client_log(client,
 			       "%s: opening %s failed with error %d: %s",
-			       __func__, herolte_nv_data_specs.nv_data_path,
+			       __func__, ipc_client_nv_data_path(client),
 			       rc, strerror(rc));
 		goto exit;
 	}
