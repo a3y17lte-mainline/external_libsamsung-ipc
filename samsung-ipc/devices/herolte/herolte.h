@@ -31,5 +31,6 @@ extern struct ipc_client_ops herolte_rfs_ops;
 extern struct ipc_client_handlers herolte_handlers;
 extern struct ipc_client_gprs_specs herolte_gprs_specs;
 extern struct ipc_client_nv_data_specs herolte_nv_data_specs;
+extern struct ipc_client_nv_data_specs a3y17lte_nv_data_specs;
 
 #endif /* __HEROLTE_H__ */

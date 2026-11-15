@@ -187,6 +187,8 @@ static int select_secure_mode(struct ipc_client *client,
 static char const * const modem_image_devices[] = {
 	"/dev/disk/by-partlabel/RADIO",                   /* PostmarketOS */
 	"/dev/block/platform/155a0000.ufs/by-name/RADIO", /* LineageOS */
+	"/dev/block/by-name/RADIO",                       /* Android */
+	"/dev/block/platform/13540000.mmc/by-name/RADIO", /* a3y17lte */
 	NULL
 };
 
@@ -597,6 +599,25 @@ struct ipc_client_handlers herolte_handlers = {
 struct ipc_client_gprs_specs herolte_gprs_specs = {
 	.gprs_get_iface = xmm626_kernel_smdk4412_gprs_get_iface,
 	.gprs_get_capabilities = xmm626_kernel_smdk4412_gprs_get_capabilities,
+};
+
+/*
+ * Galaxy A3 2017: the same modem interface as herolte with a smaller NV data
+ * file. The directory can be set at build time, for example to keep the
+ * modem away from the EFS partition.
+ */
+#ifndef A3Y17LTE_NV_DATA_DIR
+#define A3Y17LTE_NV_DATA_DIR "/efs"
+#endif
+
+struct ipc_client_nv_data_specs a3y17lte_nv_data_specs = {
+	.nv_data_path = A3Y17LTE_NV_DATA_DIR "/nv_data.bin",
+	.nv_data_md5_path = A3Y17LTE_NV_DATA_DIR "/nv_data.bin.md5",
+	.nv_data_backup_path = A3Y17LTE_NV_DATA_DIR "/.nv_data.bak",
+	.nv_data_backup_md5_path = A3Y17LTE_NV_DATA_DIR "/.nv_data.bak.md5",
+	.nv_data_secret = XMM626_NV_DATA_SECRET,
+	.nv_data_size = 0x100000,
+	.nv_data_chunk_size = XMM626_NV_DATA_CHUNK_SIZE,
 };
 
 struct ipc_client_nv_data_specs herolte_nv_data_specs = {
