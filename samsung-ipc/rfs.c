@@ -653,6 +653,9 @@ int ipc_nv_data_write(struct ipc_client *client, const void *data, size_t size,
 		return -1;
 	}
 
+	ipc_client_log(client, "Writing nv_data: offset 0x%x, size 0x%zx",
+		       offset, size);
+
 	rc = ipc_nv_data_path_check(client);
 	if (rc < 0) {
 		ipc_client_log(client, "Checking nv_data path failed");
