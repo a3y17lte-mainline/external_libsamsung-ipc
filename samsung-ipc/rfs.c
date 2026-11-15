@@ -713,7 +713,7 @@ size_t ipc_rfs_nv_data_item_size_setup(
 	if (header == NULL || nv_data == NULL || nv_size == 0)
 		return 0;
 
-	size = sizeof(struct ipc_rfs_nv_read_item_response_header) + size;
+	size = sizeof(struct ipc_rfs_nv_read_item_response_header) + nv_size;
 
 	return size;
 }
