@@ -21,14 +21,8 @@
 #define __XMM626_SEC_MODEM_H__
 
 #define XMM626_SEC_MODEM_BOOT0_DEVICE		"/dev/umts_boot0"
-#define XMM626_SEC_MODEM_BOOT1_DEVICE		"/dev/umts_boot1"
 #define XMM626_SEC_MODEM_IPC0_DEVICE		"/dev/umts_ipc0"
 #define XMM626_SEC_MODEM_RFS0_DEVICE		"/dev/umts_rfs0"
-#define XMM626_SEC_MODEM_LINK_PM_DEVICE	"/dev/link_pm"
-#define XMM626_SEC_MODEM_EHCI_POWER_SYSFS	\
-	"/sys/devices/platform/s5p-ehci/ehci_power"
-#define XMM626_SEC_MODEM_OHCI_POWER_SYSFS	\
-	"/sys/devices/platform/s5p-ohci/ohci_power"
 
 #define XMM626_SEC_MODEM_GPRS_IFACE_PREFIX	"rmnet"
 #define XMM626_SEC_MODEM_GPRS_IFACE_COUNT	3
@@ -37,17 +31,6 @@ int xmm626_kernel_smdk4412_power(struct ipc_client *client, int device_fd,
 				 int power);
 int xmm626_kernel_smdk4412_boot_power(struct ipc_client *client, int device_fd,
 				      int power);
-int xmm626_kernel_smdk4412_status_online_wait(struct ipc_client *client,
-					      int device_fd);
-int xmm626_kernel_smdk4412_hci_power(struct ipc_client *client, int power);
-int xmm626_kernel_smdk4412_link_control_enable(struct ipc_client *client,
-					       int device_fd, int enable);
-int xmm626_kernel_smdk4412_link_control_active(struct ipc_client *client,
-					       int device_fd, int active);
-int xmm626_kernel_smdk4412_link_connected_wait(struct ipc_client *client,
-					       int device_fd);
-int xmm626_kernel_smdk4412_link_get_hostwake_wait(struct ipc_client *client,
-						  int device_fd);
 
 int xmm626_kernel_smdk4412_fmt_send(struct ipc_client *client,
 				    struct ipc_message *message);

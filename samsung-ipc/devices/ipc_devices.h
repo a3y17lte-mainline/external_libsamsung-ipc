@@ -21,15 +21,7 @@
 #include <samsung-ipc.h>
 
 #include "devices/a3y17lte/a3y17lte.h"
-#include "devices/aries/aries.h"
-#include "devices/crespo/crespo.h"
-#include "devices/galaxys2/galaxys2.h"
 #include "devices/herolte/herolte.h"
-#include "devices/i9300/i9300.h"
-#include "devices/maguro/maguro.h"
-#include "devices/n5100/n5100.h"
-#include "devices/n7100/n7100.h"
-#include "devices/piranha/piranha.h"
 
 #ifndef __IPC_DEVICES_H__
 #define __IPC_DEVICES_H__
