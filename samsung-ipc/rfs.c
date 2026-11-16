@@ -17,6 +17,7 @@
  * along with libsamsung-ipc.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -53,7 +54,7 @@ char *ipc_nv_data_md5_calculate(struct ipc_client *client,
 	rc = stat(path, &st);
 	if (rc == -1) {
 		rc = errno;
-		ipc_client_log(client, "%s: stat failed with error %d",
+		ipc_client_log(client, "%s: stat failed with error %d: %s",
 			       __func__, rc, strerror(rc));
 		return NULL;
 	}
@@ -61,8 +62,8 @@ char *ipc_nv_data_md5_calculate(struct ipc_client *client,
 	if ((unsigned long)st.st_size != size) {
 		ipc_client_log(client,
 			       "%s: Checking %s size failed: "
-			       "requested size: %d, file size: %d\n",
-			       __func__, path, size, st.st_size);
+			       "requested size: %zu, file size: %lld\n",
+			       __func__, path, size, (long long) st.st_size);
 		return NULL;
 	}
 
@@ -77,9 +78,68 @@ char *ipc_nv_data_md5_calculate(struct ipc_client *client,
 	MD5_Update(&ctx, secret, strlen(secret));
 	MD5_Final((unsigned char *) &md5_hash, &ctx);
 
+	free(data);
+
 	md5_string = data2string(&md5_hash, sizeof(md5_hash));
 
 	return md5_string;
+}
+
+/* Whether size bytes at offset are inside the NV data file */
+static int ipc_nv_data_range_check(struct ipc_client *client, size_t size,
+				   unsigned int offset)
+{
+	size_t nv_size = ipc_client_nv_data_size(client);
+
+	if (size == 0 || nv_size == 0 || offset >= nv_size ||
+	    size > nv_size - offset) {
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ * Replaces the md5 file in one step: a crash between removing the old file
+ * and writing the new one would leave NV data that fails its check, which
+ * ipc_nv_data_load() answers by restoring the backup.
+ */
+static int ipc_nv_data_md5_replace(struct ipc_client *client,
+				   const char *md5_path, const char *md5_string,
+				   size_t length)
+{
+	char *tmp_path = NULL;
+	int fd;
+	int rc;
+
+	if (asprintf(&tmp_path, "%s.tmp", md5_path) < 0)
+		return -1;
+
+	unlink(tmp_path);
+
+	rc = file_data_write(client, tmp_path, md5_string, length, length, 0);
+	if (rc < 0)
+		goto error;
+
+	fd = open(tmp_path, O_RDONLY);
+	if (fd >= 0) {
+		fsync(fd);
+		close(fd);
+	}
+
+	rc = rename(tmp_path, md5_path);
+	if (rc < 0)
+		goto error;
+
+	free(tmp_path);
+
+	return 0;
+
+error:
+	unlink(tmp_path);
+	free(tmp_path);
+
+	return -1;
 }
 
 int ipc_nv_data_path_check(struct ipc_client *client)
@@ -614,6 +674,13 @@ void *ipc_nv_data_read(struct ipc_client *client, size_t size,
 	if (path == NULL || chunk_size == 0)
 		return NULL;
 
+	if (ipc_nv_data_range_check(client, size, offset) < 0) {
+		ipc_client_log(client,
+			       "Reading nv_data outside the file: "
+			       "offset 0x%x, size 0x%zx", offset, size);
+		return NULL;
+	}
+
 	rc = ipc_nv_data_path_check(client);
 	if (rc < 0) {
 		ipc_client_log(client, "Checking nv_data path failed");
@@ -656,6 +723,12 @@ int ipc_nv_data_write(struct ipc_client *client, const void *data, size_t size,
 	ipc_client_log(client, "Writing nv_data: offset 0x%x, size 0x%zx",
 		       offset, size);
 
+	/* A write beyond the end would grow the file and fail its checks */
+	if (data == NULL || ipc_nv_data_range_check(client, size, offset) < 0) {
+		ipc_client_log(client, "Writing nv_data outside the file");
+		return -1;
+	}
+
 	rc = ipc_nv_data_path_check(client);
 	if (rc < 0) {
 		ipc_client_log(client, "Checking nv_data path failed");
@@ -682,13 +755,7 @@ int ipc_nv_data_write(struct ipc_client *client, const void *data, size_t size,
 
 	length = strlen(md5_string);
 
-	rc = unlink(md5_path);
-	if (rc < 0) {
-		ipc_client_log(client, "Removing nv_data md5 path failed");
-		goto error;
-	}
-
-	rc = file_data_write(client, md5_path, md5_string, length, length, 0);
+	rc = ipc_nv_data_md5_replace(client, md5_path, md5_string, length);
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data md5 failed");
 		goto error;
@@ -737,6 +804,8 @@ void *ipc_rfs_nv_read_item_setup(
 		return NULL;
 
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	p = (unsigned char *) data;
 
