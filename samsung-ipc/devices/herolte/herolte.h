@@ -22,9 +22,25 @@
 #ifndef __HEROLTE_H__
 #define __HEROLTE_H__
 
+#include <stddef.h>
+#include <sys/time.h>
+
+#include <samsung-ipc.h>
+
 struct herolte_transport_data {
 	int fd;
 };
+
+int herolte_boot(struct ipc_client *client);
+int herolte_open(struct ipc_client *client, void *data, int type);
+int herolte_close(struct ipc_client *client, void *data);
+int herolte_read(struct ipc_client *client, void *data, void *buffer,
+		 size_t length);
+int herolte_write(struct ipc_client *client, void *data, const void *buffer,
+		  size_t length);
+int herolte_poll(struct ipc_client *client, void *data,
+		 struct ipc_poll_fds *fds, struct timeval *timeout);
+int herolte_power_off(struct ipc_client *client, void *data);
 
 extern struct ipc_client_ops herolte_fmt_ops;
 extern struct ipc_client_ops herolte_rfs_ops;
