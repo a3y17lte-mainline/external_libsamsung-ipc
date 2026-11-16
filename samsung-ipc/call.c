@@ -77,14 +77,19 @@ struct ipc_call_list_entry *ipc_call_list_entry_extract(
 	offset = sizeof(struct ipc_call_list_header);
 
 	for (i = 0; i < (index + 1); i++) {
+		/* The entry, then its number, must be inside the message */
+		if (size - offset < sizeof(struct ipc_call_list_entry))
+			return NULL;
+
 		entry = (struct ipc_call_list_entry *) (
 			(unsigned char *) data + offset);
-		offset += sizeof(struct ipc_call_list_entry) +
-			entry->number_length;
-	}
+		offset += sizeof(struct ipc_call_list_entry);
 
-	if (offset > size)
-		return NULL;
+		if (size - offset < entry->number_length)
+			return NULL;
+
+		offset += entry->number_length;
+	}
 
 	return entry;
 }
@@ -102,6 +107,8 @@ char *ipc_call_list_entry_number_extract(
 	number_length = entry->number_length + sizeof(char);
 
 	number = (char *) calloc(1, number_length);
+	if (number == NULL)
+		return NULL;
 
 	strncpy(number, (char *) entry + sizeof(struct ipc_call_list_entry),
 		entry->number_length);
@@ -141,6 +148,8 @@ void *ipc_call_burst_dtmf_setup(
 		return NULL;
 
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	header = (struct ipc_call_burst_dtmf_request_header *) data;
 	header->count = count;

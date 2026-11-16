@@ -44,11 +44,15 @@ char *ipc_misc_me_imsi_imsi_extract(const void *data, size_t size)
 		return NULL;
 
 	header = (struct ipc_misc_me_imsi_header *) data;
+	if (header->length > size - sizeof(struct ipc_misc_me_imsi_header))
+		return NULL;
 
 	/* header->length doesn't count the final null character */
 	imsi_length = header->length + sizeof(char);
 
 	imsi = (char *) calloc(1, imsi_length);
+	if (imsi == NULL)
+		return NULL;
 
 	strncpy(imsi, (char *) data + sizeof(struct ipc_misc_me_imsi_header),
 		header->length);
@@ -68,6 +72,8 @@ char *ipc_misc_me_sn_extract(const struct ipc_misc_me_sn_response_data *data)
 	length = data->length + sizeof(char);
 
 	string = (char *) calloc(1, length);
+	if (string == NULL)
+		return NULL;
 
 	strncpy(string, (char *) &data->data, data->length);
 	string[data->length] = '\0';

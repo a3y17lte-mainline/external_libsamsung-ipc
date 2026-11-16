@@ -161,6 +161,8 @@ void *ipc_sec_rsim_access_setup(
 		return NULL;
 
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	p = (unsigned char *) data;
 

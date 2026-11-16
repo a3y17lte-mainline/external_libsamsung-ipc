@@ -34,6 +34,12 @@ size_t ipc_sms_send_msg_size_setup(
 		return 0;
 	}
 
+	/* The header counts the SMSC length byte, the SMSC and the PDU */
+	if (smsc_size > 0xff || pdu_size > 0xff ||
+	    sizeof(unsigned char) + smsc_size + pdu_size > 0xff) {
+		return 0;
+	}
+
 	size = sizeof(struct ipc_sms_send_msg_request_header) +
 		sizeof(unsigned char) + smsc_size + pdu_size;
 
@@ -54,17 +60,19 @@ void *ipc_sms_send_msg_setup(struct ipc_sms_send_msg_request_header *header,
 		return NULL;
 	}
 
-	smsc_length = (unsigned char) smsc_size;
-
-	header->length = (unsigned char) (
-		sizeof(unsigned char) + smsc_size + pdu_size);
-
 	size = ipc_sms_send_msg_size_setup(header, smsc, smsc_size, pdu,
 					   pdu_size);
 	if (size == 0)
 		return NULL;
 
+	smsc_length = (unsigned char) smsc_size;
+
+	header->length = (unsigned char) (
+		sizeof(unsigned char) + smsc_size + pdu_size);
+
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	p = (unsigned char *) data;
 
@@ -86,6 +94,9 @@ void *ipc_sms_send_msg_setup(struct ipc_sms_send_msg_request_header *header,
 size_t ipc_sms_incoming_msg_pdu_size_extract(const void *data, size_t size)
 {
 	struct ipc_sms_incoming_msg_header *header;
+
+	if (data == NULL || size < sizeof(struct ipc_sms_incoming_msg_header))
+		return 0;
 
 	header = (struct ipc_sms_incoming_msg_header *) data;
 	if (header->length == 0 ||
@@ -130,6 +141,11 @@ size_t ipc_sms_save_msg_size_setup(
 	if (smsc == NULL)
 		smsc_size = 0;
 
+	if (smsc_size > 0xff || pdu_size > 0xff ||
+	    sizeof(unsigned char) + smsc_size + pdu_size > 0xff) {
+		return 0;
+	}
+
 	size = sizeof(struct ipc_sms_save_msg_request_header) +
 		sizeof(unsigned char) + smsc_size + pdu_size;
 
@@ -151,19 +167,21 @@ void *ipc_sms_save_msg_setup(struct ipc_sms_save_msg_request_header *header,
 	if (smsc == NULL)
 		smsc_size = 0;
 
-	smsc_length = (unsigned char) smsc_size;
-
-	header->magic = 2;
-	header->index = 12 - 1,
-		header->length = (unsigned char) (
-			sizeof(unsigned char) + smsc_size + pdu_size);
-
 	size = ipc_sms_save_msg_size_setup(header, smsc, smsc_size, pdu,
 					   pdu_size);
 	if (size == 0)
 		return NULL;
 
+	smsc_length = (unsigned char) smsc_size;
+
+	header->magic = 2;
+	header->index = 12 - 1;
+	header->length = (unsigned char) (
+		sizeof(unsigned char) + smsc_size + pdu_size);
+
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	p = (unsigned char *) data;
 
