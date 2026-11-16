@@ -73,6 +73,8 @@ static int upload_chunk(struct ipc_client *client,
 	struct firmware_toc_entry const *current_toc_entry;
 	uint32_t remaining;
 
+	memset(&partition, 0, sizeof(partition));
+
 	ipc_client_log(client, "Uploading %s", name);
 
 	boot_toc_entry = find_toc_entry("BOOT", toc);
@@ -90,16 +92,20 @@ static int upload_chunk(struct ipc_client *client,
 		goto exit;
 	}
 
+	if (current_toc_entry->loadaddr < boot_toc_entry->loadaddr) {
+		ipc_client_log(client, "%s: %s is loaded below BOOT", __func__,
+			       name);
+		goto exit;
+	}
+
 	if (size != NULL)
 		*size = current_toc_entry->size;
-	ipc_client_log(client, " - blob size for %s is %lu", name,
+	ipc_client_log(client, " - blob size for %s is %u", name,
 		       current_toc_entry->size);
 
 	partition.binary = calloc(1, MAX_CHUNK_LEN);
 	if (partition.binary == NULL) {
-		rc = -errno;
-		ipc_client_log(client, "%s: calloc failed with error %d: %s",
-			       __func__, rc, strerror(rc));
+		ipc_client_log(client, "%s: calloc failed", __func__);
 		goto exit;
 	}
 
@@ -111,9 +117,8 @@ static int upload_chunk(struct ipc_client *client,
 	partition.len = 0;
 
 	if (lseek(firmware_fd, partition.b_offset, SEEK_SET) < 0) {
-		rc = -errno;
 		ipc_client_log(client, "%s: lseek failed with error %d: %s",
-			       __func__, rc, strerror(rc));
+			       __func__, errno, strerror(errno));
 		goto exit;
 	}
 
@@ -123,19 +128,17 @@ static int upload_chunk(struct ipc_client *client,
 			remaining : MAX_CHUNK_LEN;
 		if (data_read(client, firmware_fd, partition.binary,
 			      partition.len) != partition.len) {
-			rc = errno;
 			ipc_client_log(client,
 				       "%s: read failed with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, errno, strerror(errno));
 			goto exit;
 		}
 
 		if (ioctl(device_fd, IOCTL_DPRAM_SEND_BOOT, &partition) == -1) {
-			rc = errno;
 			ipc_client_log(client,
 				       "%s: IOCTL_DPRAM_SEND_BOOT failed"
 				       " with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, errno, strerror(errno));
 			goto exit;
 		}
 		partition.m_offset += partition.len;
@@ -146,10 +149,7 @@ static int upload_chunk(struct ipc_client *client,
 	rc = 0;
 
 exit:
-	if (partition.binary != NULL) {
-		partition.binary = NULL;
-		free(partition.binary);
-	}
+	free(partition.binary);
 
 	return rc;
 }
@@ -199,15 +199,15 @@ int herolte_boot(struct ipc_client *client)
 	int imagefd = -1;
 	int nvfd = -1;
 	int rc = -1;
-	uint32_t size_boot;
-	uint32_t size_main;
+	int err;
+	uint32_t size_boot = 0;
+	uint32_t size_main = 0;
 
 	ipc_client_log(client, "Loading firmware TOC");
 
 	imagefd = open_android_modem_partition(client, modem_image_devices);
 	if (imagefd == -1) {
-		rc = errno;
-		if (rc == ENOENT)
+		if (errno == ENOENT)
 			ipc_client_log(client,
 				       "%s: no modem image block device found!",
 				       __func__);
@@ -216,16 +216,16 @@ int herolte_boot(struct ipc_client *client)
 				       "%s: "
 				       "open_image_device failed with error %d:"
 				       " %s",
-				       __func__, rc, strerror(rc));
+				       __func__, errno, strerror(errno));
 		goto exit;
 	}
 
 	if (data_read(client, imagefd, &toc[0], sizeof(toc)) != sizeof(toc)) {
-		rc = errno;
+		err = errno;
 		ipc_client_log(client,
 			       "%s: read modem image block device failed "
 			       " with error %d: %s",
-			       __func__, rc, strerror(rc));
+			       __func__, err, strerror(err));
 		goto exit;
 	}
 
@@ -233,32 +233,32 @@ int herolte_boot(struct ipc_client *client)
 
 	nvfd = open(ipc_client_nv_data_path(client), O_RDONLY | O_NOCTTY);
 	if (nvfd == -1) {
-		rc = errno;
+		err = errno;
 		ipc_client_log(client,
 			       "%s: opening %s failed with error %d: %s",
 			       __func__, ipc_client_nv_data_path(client),
-			       rc, strerror(rc));
+			       err, strerror(err));
 		goto exit;
 	}
 	ipc_client_log(client, "Opened NV data file");
 
 	boot0_fd = open(XMM626_SEC_MODEM_BOOT0_DEVICE, O_RDWR | O_NOCTTY);
 	if (boot0_fd < 0) {
-		rc = errno;
+		err = errno;
 		ipc_client_log(client,
 			       "%s: opening %s failed with error %d: %s",
 			       __func__, XMM626_SEC_MODEM_BOOT0_DEVICE,
-			       rc, strerror(rc));
+			       err, strerror(err));
 		goto exit;
 	}
 
 	ipc_client_log(client, "Resetting modem");
 	if (ioctl(boot0_fd, IOCTL_MODEM_RESET, 0) == -1) {
-		rc = errno;
+		err = errno;
 		ipc_client_log(client,
 			       "%s: "
 			       "IOCTL_MODEM_RESET failed with error %d: %s",
-			       __func__, rc, strerror(rc));
+			       __func__, err, strerror(err));
 		goto exit;
 	}
 
@@ -295,11 +295,11 @@ int herolte_boot(struct ipc_client *client)
 
 	ipc_client_log(client, "Kicking off firmware download");
 	if (ioctl(boot0_fd, IOCTL_MODEM_DL_START, 0) < 0) {
-		rc = errno;
+		err = errno;
 		ipc_client_log(client,
 			       "%s: "
-			       "IOCTL_MODEM_RESET failed with error %d: %s",
-			       __func__, rc, strerror(rc));
+			       "IOCTL_MODEM_DL_START failed with error %d: %s",
+			       __func__, err, strerror(err));
 		goto exit;
 	}
 
@@ -315,18 +315,18 @@ int herolte_boot(struct ipc_client *client)
 		buf = 0x900d;
 		if (data_write(client, boot0_fd, &buf, sizeof(buf)) !=
 		    sizeof(buf)) {
-			rc = errno;
+			err = errno;
 			ipc_client_log(client,
 				       "%s: write failed with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, err, strerror(err));
 			goto exit;
 		}
 		if (data_read(client, boot0_fd, &buf, sizeof(buf)) !=
 		    sizeof(buf)) {
-			rc = errno;
+			err = errno;
 			ipc_client_log(client,
 				       "%s: read failed with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, err, strerror(err));
 			goto exit;
 		}
 		if (buf != 0xa00d) {
@@ -341,18 +341,18 @@ int herolte_boot(struct ipc_client *client)
 		buf = 0x9f00;
 		if (data_write(client, boot0_fd, &buf,
 			       sizeof(buf)) != sizeof(buf)) {
-			rc = errno;
+			err = errno;
 			ipc_client_log(client,
 				       "%s: write failed with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, err, strerror(err));
 			goto exit;
 		}
 		if (data_read(client, boot0_fd, &buf,
 			      sizeof(buf)) != sizeof(buf)) {
-			rc = errno;
+			err = errno;
 			ipc_client_log(client,
 				       "%s: read failed with error %d: %s",
-				       __func__, rc, strerror(rc));
+				       __func__, err, strerror(err));
 			goto exit;
 		}
 		if (buf != 0xaf00) {
@@ -550,6 +550,8 @@ int herolte_data_create(__attribute__((unused)) struct ipc_client *client,
 		return -1;
 
 	*transport_data = calloc(1, sizeof(struct herolte_transport_data));
+	if (*transport_data == NULL)
+		return -1;
 
 	return 0;
 }
