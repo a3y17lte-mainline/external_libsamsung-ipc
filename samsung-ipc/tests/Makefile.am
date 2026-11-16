@@ -22,6 +22,7 @@ libsamsung_ipc_test_SOURCES = \
 	a3y17lte_data.h \
 	devices.c \
 	devices.h \
+	nv_restore.c \
 	robustness.c \
 	robustness.h \
 	$(NULL)

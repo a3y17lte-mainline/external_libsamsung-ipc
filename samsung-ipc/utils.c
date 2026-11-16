@@ -17,6 +17,7 @@
  * along with libsamsung-ipc.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -275,6 +276,54 @@ error:
 		close(fd);
 
 	errno = rc;
+	return -1;
+}
+
+int file_data_replace(struct ipc_client *client, const char *path,
+		      const void *data, size_t size, size_t chunk_size)
+{
+	char *tmp_path = NULL;
+	char *dir;
+	char *slash;
+	int fd;
+
+	if (path == NULL || asprintf(&tmp_path, "%s.tmp", path) < 0)
+		return -1;
+
+	unlink(tmp_path);
+
+	if (file_data_write(client, tmp_path, data, size, chunk_size, 0) < 0)
+		goto error;
+
+	if (rename(tmp_path, path) < 0) {
+		ipc_client_log(client, "%s: renaming %s failed: %s", __func__,
+			       tmp_path, strerror(errno));
+		goto error;
+	}
+
+	/* The rename itself on the disk too */
+	dir = strdup(path);
+	if (dir != NULL) {
+		slash = strrchr(dir, '/');
+		if (slash != NULL) {
+			*(slash == dir ? slash + 1 : slash) = '\0';
+			fd = open(dir, O_RDONLY | O_DIRECTORY);
+			if (fd >= 0) {
+				fsync(fd);
+				close(fd);
+			}
+		}
+		free(dir);
+	}
+
+	free(tmp_path);
+
+	return 0;
+
+error:
+	unlink(tmp_path);
+	free(tmp_path);
+
 	return -1;
 }
 

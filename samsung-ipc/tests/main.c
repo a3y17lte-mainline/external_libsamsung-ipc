@@ -140,6 +140,10 @@ static struct test tests[] = {
 		"firmware_toc",
 		test_firmware_toc
 	},
+	{
+		"nv_data_restore",
+		test_nv_data_restore
+	},
 };
 
 static void usage(const char *progname)

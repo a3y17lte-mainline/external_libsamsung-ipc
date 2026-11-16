@@ -132,4 +132,8 @@ int ipc_device_match(const char *name, const char *compatible, size_t size);
  */
 size_t ipc_client_firmware_nv_size(struct ipc_client *client);
 
+/* Writes path.tmp, syncs it and renames it to path */
+int file_data_replace(struct ipc_client *client, const char *path,
+		      const void *data, size_t size, size_t chunk_size);
+
 #endif /* __IPC_H__ */

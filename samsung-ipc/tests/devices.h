@@ -27,6 +27,7 @@ struct ipc_client;
 int test_device_match(struct ipc_client *client);
 int test_device_gprs(struct ipc_client *client);
 int test_firmware_toc(struct ipc_client *client);
+int test_nv_data_restore(struct ipc_client *client);
 
 /* A firmware image with the A3's TOC and the given NV size */
 int test_write_toc(const char *path, uint32_t nv_size, int with_toc);

@@ -27,6 +27,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 
+#include <openssl/evp.h>
 #include <openssl/md5.h>
 
 #include <samsung-ipc.h>
@@ -43,7 +44,7 @@ char *ipc_nv_data_md5_calculate(struct ipc_client *client,
 	void *data = NULL;
 	char *md5_string = NULL;
 	unsigned char md5_hash[MD5_DIGEST_LENGTH] = { 0 };
-	MD5_CTX ctx;
+	EVP_MD_CTX *ctx;
 	int rc;
 
 	if (secret == NULL) {
@@ -73,11 +74,19 @@ char *ipc_nv_data_md5_calculate(struct ipc_client *client,
 		return NULL;
 	}
 
-	MD5_Init(&ctx);
-	MD5_Update(&ctx, data, size);
-	MD5_Update(&ctx, secret, strlen(secret));
-	MD5_Final((unsigned char *) &md5_hash, &ctx);
+	ctx = EVP_MD_CTX_new();
+	if (ctx == NULL ||
+	    EVP_DigestInit_ex(ctx, EVP_md5(), NULL) != 1 ||
+	    EVP_DigestUpdate(ctx, data, size) != 1 ||
+	    EVP_DigestUpdate(ctx, secret, strlen(secret)) != 1 ||
+	    EVP_DigestFinal_ex(ctx, md5_hash, NULL) != 1) {
+		ipc_client_log(client, "%s: MD5 failed", __func__);
+		EVP_MD_CTX_free(ctx);
+		free(data);
+		return NULL;
+	}
 
+	EVP_MD_CTX_free(ctx);
 	free(data);
 
 	md5_string = data2string(&md5_hash, sizeof(md5_hash));
@@ -97,49 +106,6 @@ static int ipc_nv_data_range_check(struct ipc_client *client, size_t size,
 	}
 
 	return 0;
-}
-
-/*
- * Replaces the md5 file in one step: a crash between removing the old file
- * and writing the new one would leave NV data that fails its check, which
- * ipc_nv_data_load() answers by restoring the backup.
- */
-static int ipc_nv_data_md5_replace(struct ipc_client *client,
-				   const char *md5_path, const char *md5_string,
-				   size_t length)
-{
-	char *tmp_path = NULL;
-	int fd;
-	int rc;
-
-	if (asprintf(&tmp_path, "%s.tmp", md5_path) < 0)
-		return -1;
-
-	unlink(tmp_path);
-
-	rc = file_data_write(client, tmp_path, md5_string, length, length, 0);
-	if (rc < 0)
-		goto error;
-
-	fd = open(tmp_path, O_RDONLY);
-	if (fd >= 0) {
-		fsync(fd);
-		close(fd);
-	}
-
-	rc = rename(tmp_path, md5_path);
-	if (rc < 0)
-		goto error;
-
-	free(tmp_path);
-
-	return 0;
-
-error:
-	unlink(tmp_path);
-	free(tmp_path);
-
-	return -1;
 }
 
 int ipc_nv_data_path_check(struct ipc_client *client)
@@ -431,6 +397,7 @@ complete:
 	return rc;
 }
 
+/* Copies the (checked) NV data to the backup, and checks the backup */
 int ipc_nv_data_backup(struct ipc_client *client)
 {
 	void *data = NULL;
@@ -441,7 +408,6 @@ int ipc_nv_data_backup(struct ipc_client *client)
 	size_t size;
 	size_t chunk_size;
 	char *md5_string = NULL;
-	size_t length;
 	int rc;
 
 	if (client == NULL)
@@ -458,9 +424,10 @@ int ipc_nv_data_backup(struct ipc_client *client)
 		return -1;
 	}
 
-	rc = ipc_nv_data_path_check(client);
+	/* Only NV data that passes its own check becomes the backup */
+	rc = ipc_nv_data_check(client);
 	if (rc < 0) {
-		ipc_client_log(client, "Checking nv_data path failed");
+		ipc_client_log(client, "Not backing up nv_data: it fails its check");
 		goto error;
 	}
 
@@ -477,27 +444,22 @@ int ipc_nv_data_backup(struct ipc_client *client)
 		goto error;
 	}
 
-	length = strlen(md5_string);
-
-	rc = unlink(backup_path);
-	if (rc < 0)
-		ipc_client_log(client, "Removing nv_data backup path failed");
-
-	rc = file_data_write(client, backup_path, data, size, chunk_size, 0);
+	rc = file_data_replace(client, backup_path, data, size, chunk_size);
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data backup failed");
 		goto error;
 	}
 
-	rc = unlink(backup_md5_path);
-	if (rc < 0)
-		ipc_client_log(client,
-			       "Removing nv_data backup md5 path failed");
-
-	rc = file_data_write(client, backup_md5_path, md5_string, length,
-			     length, 0);
+	rc = file_data_replace(client, backup_md5_path, md5_string,
+			       strlen(md5_string), strlen(md5_string));
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data backup md5 failed");
+		goto error;
+	}
+
+	rc = ipc_nv_data_backup_check(client);
+	if (rc < 0) {
+		ipc_client_log(client, "The new nv_data backup fails its check");
 		goto error;
 	}
 
@@ -510,18 +472,21 @@ error:
 	rc = -1;
 
 complete:
-	if (md5_string != NULL)
-		free(md5_string);
-
-	if (data != NULL)
-		free(data);
+	free(md5_string);
+	free(data);
 
 	return rc;
 }
 
+/*
+ * Replaces the NV data with the backup, which has to pass its check (its
+ * size and its md5 with the secret). The replaced file is kept as
+ * <nv_data_path>.bad.
+ */
 int ipc_nv_data_restore(struct ipc_client *client)
 {
 	void *data = NULL;
+	char *bad_path = NULL;
 	char *path;
 	char *md5_path;
 	char *backup_path;
@@ -550,7 +515,8 @@ int ipc_nv_data_restore(struct ipc_client *client)
 
 	rc = ipc_nv_data_backup_check(client);
 	if (rc < 0) {
-		ipc_client_log(client, "Checking nv_data backup failed");
+		ipc_client_log(client, "Not restoring nv_data: the backup "
+			       "fails its check");
 		goto error;
 	}
 
@@ -560,18 +526,25 @@ int ipc_nv_data_restore(struct ipc_client *client)
 		goto error;
 	}
 
-	rc = unlink(path);
-	if (rc < 0)
-		ipc_client_log(client, "Removing nv_data path failed");
+	if (asprintf(&bad_path, "%s.bad", path) < 0) {
+		bad_path = NULL;
+		goto error;
+	}
 
-	rc = file_data_write(client, path, data, size, chunk_size, 0);
+	if (rename(path, bad_path) == 0)
+		ipc_client_log(client, "Kept the replaced nv_data as %s",
+			       bad_path);
+	else if (errno != ENOENT)
+		ipc_client_log(client, "Keeping the replaced nv_data failed: %s",
+			       strerror(errno));
+
+	rc = file_data_replace(client, path, data, size, chunk_size);
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data failed");
 		goto error;
 	}
 
 	free(data);
-	data = NULL;
 
 	length = MD5_DIGEST_LENGTH_ASCII;
 
@@ -581,17 +554,19 @@ int ipc_nv_data_restore(struct ipc_client *client)
 		goto error;
 	}
 
-	rc = unlink(md5_path);
-	if (rc < 0)
-		ipc_client_log(client, "Removing nv_data md5 path failed");
-
-	rc = file_data_write(client, md5_path, data, length, length, 0);
+	rc = file_data_replace(client, md5_path, data, length, length);
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data md5 failed");
 		goto error;
 	}
 
-	ipc_client_log(client, "Restored nv_data");
+	rc = ipc_nv_data_check(client);
+	if (rc < 0) {
+		ipc_client_log(client, "The restored nv_data fails its check");
+		goto error;
+	}
+
+	ipc_client_log(client, "Restored nv_data from the backup");
 
 	rc = 0;
 	goto complete;
@@ -600,17 +575,25 @@ error:
 	rc = -1;
 
 complete:
-	if (data != NULL)
-		free(data);
+	free(bad_path);
+	free(data);
 
 	return rc;
 }
 
+/*
+ * The NV data, checked. NV data that fails its check is replaced with the
+ * backup if the backup passes its own; a missing or bad backup is made from
+ * NV data that passes. Nothing is replaced when the sizes do not fit this
+ * device, which means a wrong device setting, not damaged data.
+ */
 void *ipc_nv_data_load(struct ipc_client *client)
 {
+	struct stat st;
 	void *data;
 	char *path;
 	size_t size;
+	size_t firmware_size;
 	size_t chunk_size;
 	int rc;
 
@@ -623,26 +606,38 @@ void *ipc_nv_data_load(struct ipc_client *client)
 	if (path == NULL || size == 0 || chunk_size == 0)
 		return NULL;
 
+	/* The firmware's TOC has the NV size it was built for */
+	firmware_size = ipc_client_firmware_nv_size(client);
+	if (firmware_size != 0 && firmware_size != size) {
+		ipc_client_log(client,
+			       "The firmware's NV size (0x%zx) is not this "
+			       "device's (0x%zx): wrong device?",
+			       firmware_size, size);
+		return NULL;
+	}
+
 	rc = ipc_nv_data_check(client);
 	if (rc < 0) {
 		ipc_client_log(client, "Checking nv_data failed");
+
+		if (stat(path, &st) == 0 && (size_t) st.st_size != size) {
+			ipc_client_log(client,
+				       "nv_data is 0x%llx bytes, not 0x%zx: "
+				       "wrong device? Not restoring it",
+				       (long long) st.st_size, size);
+			return NULL;
+		}
 
 		rc = ipc_nv_data_restore(client);
 		if (rc < 0) {
 			ipc_client_log(client, "Restoring nv_data failed");
 			return NULL;
 		}
-
-		rc = ipc_nv_data_check(client);
-		if (rc < 0) {
-			ipc_client_log(client, "Checking nv_data failed");
-			return NULL;
-		}
 	}
 
-	rc = ipc_nv_data_backup_path_check(client);
+	rc = ipc_nv_data_backup_check(client);
 	if (rc < 0) {
-		ipc_client_log(client, "Checking nv_data backup path failed");
+		ipc_client_log(client, "Checking nv_data backup failed");
 
 		rc = ipc_nv_data_backup(client);
 		if (rc < 0)
@@ -755,7 +750,8 @@ int ipc_nv_data_write(struct ipc_client *client, const void *data, size_t size,
 
 	length = strlen(md5_string);
 
-	rc = ipc_nv_data_md5_replace(client, md5_path, md5_string, length);
+	/* In one step: NV data without a matching md5 would be restored */
+	rc = file_data_replace(client, md5_path, md5_string, length, length);
 	if (rc < 0) {
 		ipc_client_log(client, "Writing nv_data md5 failed");
 		goto error;
