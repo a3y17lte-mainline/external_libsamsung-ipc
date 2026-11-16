@@ -20,6 +20,7 @@
 
 #include <samsung-ipc.h>
 
+#include "devices/a3y17lte/a3y17lte.h"
 #include "devices/aries/aries.h"
 #include "devices/crespo/crespo.h"
 #include "devices/galaxys2/galaxys2.h"

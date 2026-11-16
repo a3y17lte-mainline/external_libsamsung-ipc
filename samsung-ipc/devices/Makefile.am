@@ -1,6 +1,8 @@
 libsamsung_ipc_la_SOURCES += \
 	devices/ipc_devices.c \
 	devices/ipc_devices.h \
+	devices/a3y17lte/a3y17lte.c \
+	devices/a3y17lte/a3y17lte.h \
 	devices/crespo/crespo.c \
 	devices/crespo/crespo.h \
 	devices/crespo/crespo_modem_ctl.h \

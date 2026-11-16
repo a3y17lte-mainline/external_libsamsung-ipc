@@ -73,6 +73,7 @@ libsamsung_ipc_local_src_files := \
 	samsung-ipc/devices/crespo/crespo.c \
 	samsung-ipc/devices/galaxys2/galaxys2.c \
 	samsung-ipc/devices/herolte/herolte.c \
+	samsung-ipc/devices/a3y17lte/a3y17lte.c \
 	samsung-ipc/devices/i9300/i9300.c \
 	samsung-ipc/devices/maguro/maguro.c \
 	samsung-ipc/devices/n5100/n5100.c \
