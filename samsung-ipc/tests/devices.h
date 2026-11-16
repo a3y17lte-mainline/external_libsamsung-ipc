@@ -17,15 +17,18 @@
  * along with libsamsung-ipc.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __A3Y17LTE_H__
-#define __A3Y17LTE_H__
+#ifndef __TESTS_DEVICES_H__
+#define __TESTS_DEVICES_H__
 
-/* Packet data channels 10-24 of the kernel driver */
-#define A3Y17LTE_GPRS_IFACE_COUNT	15
+#include <stdint.h>
 
-extern struct ipc_client_ops a3y17lte_fmt_ops;
-extern struct ipc_client_ops a3y17lte_rfs_ops;
-extern struct ipc_client_handlers a3y17lte_handlers;
-extern struct ipc_client_gprs_specs a3y17lte_gprs_specs;
+struct ipc_client;
 
-#endif /* __A3Y17LTE_H__ */
+int test_device_match(struct ipc_client *client);
+int test_device_gprs(struct ipc_client *client);
+int test_firmware_toc(struct ipc_client *client);
+
+/* A firmware image with the A3's TOC and the given NV size */
+int test_write_toc(const char *path, uint32_t nv_size, int with_toc);
+
+#endif /* __TESTS_DEVICES_H__ */

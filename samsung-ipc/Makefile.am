@@ -30,10 +30,12 @@ libsamsung_ipc_la_SOURCES = \
 	rfs.c \
 	gen.c \
 	shannon.c \
+	framing.c \
+	framing.h \
 	$(NULL)
 
 include devices/Makefile.am
-include modems/Makefile.am
+include transports/Makefile.am
 include partitions/Makefile.am
 
 libsamsung_ipc_la_LIBADD = \

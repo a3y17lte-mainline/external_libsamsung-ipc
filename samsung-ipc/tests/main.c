@@ -32,6 +32,7 @@
 #include "shannon_data.h"
 #include "a3y17lte_data.h"
 #include "robustness.h"
+#include "devices.h"
 
 struct test {
 	char *name;
@@ -127,6 +128,18 @@ static struct test tests[] = {
 		"nv_data",
 		test_nv_data
 	},
+	{
+		"device_match",
+		test_device_match
+	},
+	{
+		"device_gprs",
+		test_device_gprs
+	},
+	{
+		"firmware_toc",
+		test_firmware_toc
+	},
 };
 
 static void usage(const char *progname)
@@ -206,6 +219,9 @@ int main(int argc, char *argv[])
 		usage(progname);
 		return EX_USAGE;
 	}
+
+	/* The tests use the A3's device description, on any machine */
+	setenv("LIBSAMSUNG_IPC_DEVICE", "a3y17lte", 0);
 
 	test = get_test(given_test_name);
 	if (test == NULL) {

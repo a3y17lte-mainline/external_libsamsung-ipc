@@ -19,160 +19,108 @@
  * along with libsamsung-ipc.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdarg.h>
-#include <unistd.h>
-#include <stdbool.h>
-#include <termios.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <asm/types.h>
-#include <sys/utsname.h>
+#include <unistd.h>
 
 #include <samsung-ipc.h>
 
 #include "ipc.h"
 #include "devices/ipc_devices.h"
+#include "partitions/toc/toc.h"
 
-int ipc_device_detect(void)
+/* Where the kernel shows the device tree's root compatible list */
+static const char *const ipc_compatible_paths[] = {
+	"/proc/device-tree/compatible",
+	"/sys/firmware/devicetree/base/compatible",
+	NULL
+};
+
+int ipc_device_match(const char *name, const char *compatible, size_t size)
 {
-	char buffer[4096] = { 0 };
-	struct utsname utsname;
-	char *name = NULL;
-	char *board_name = NULL;
-	char *kernel_version = NULL;
-	char *line, *p, *c;
-	int index = -1;
-	int fd = -1;
-	ssize_t length;
-	int i;
+	unsigned int i, j;
+	size_t offset;
 
-#ifdef IPC_DEVICE_NAME
-	name = strdup(IPC_DEVICE_NAME);
-#endif
+	if (name != NULL) {
+		for (i = 0; i < ipc_devices_count; i++)
+			if (strcmp(name, ipc_devices[i].name) == 0)
+				return (int) i;
 
-#ifdef IPC_DEVICE_BOARD_NAME
-	board_name = strdup(IPC_DEVICE_BOARD_NAME);
-#else
-	/* Read board name from cpuinfo */
-
-	fd = open("/proc/cpuinfo", O_RDONLY);
-	if (fd < 0)
-		goto error;
-
-	/* The last byte stays zero: the buffer is parsed as a string */
-	length = read(fd, &buffer, sizeof(buffer) - 1);
-	close(fd);
-	if (length == -1)
-		goto error;
-
-	line = strtok(buffer, "\n");
-	while (line != NULL) {
-		if (strncmp(line, "Hardware", 8) == 0) {
-			/* In arch/arm/kernel/setup.c, Linux does the following:
-			 * seq_printf(m, "Hardware\t: %s\n", machine_name);
-			 */
-			if (strlen(line) < 8 + 3)
-				break;
-
-			p = line + 8 + 3;
-			c = p;
-
-			while (*c != '\n' && *c != '\0') {
-				*c = tolower(*c);
-				c++;
-			}
-
-			*c = '\0';
-
-			board_name = strdup(p);
-			break;
-		}
-
-		line = strtok(NULL, "\n");
-	}
-#endif
-
-#ifdef IPC_DEVICE_KERNEL_VERSION
-	kernel_version = strdup(IPC_DEVICE_KERNEL_VERSION);
-#else
-	memset(&utsname, 0, sizeof(utsname));
-
-	uname(&utsname);
-
-	kernel_version = strdup(utsname.release);
-#endif
-
-	if (name == NULL && board_name == NULL)
-		goto error;
-
-	for (i = 0; i < (int) ipc_devices_count; i++) {
-		/*
-		 * Eliminate index if neither name nor board name can be checked
-		 */
-		if (ipc_devices[i].name == NULL &&
-		    ipc_devices[i].board_name == NULL) {
-			continue;
-		}
-
-		/* Eliminate index if the name doesn't match */
-		if (name != NULL && ipc_devices[i].name != NULL &&
-		    strcmp(name, ipc_devices[i].name) != 0) {
-			continue;
-		}
-
-		/* Eliminate index if the board name doesn't match */
-		if (board_name != NULL && ipc_devices[i].board_name != NULL &&
-		    strcmp(board_name, ipc_devices[i].board_name) != 0) {
-			continue;
-		}
-
-		/* Keep index but don't break yet since we may have a better
-		 * match with kernel version
-		 */
-		index = i;
-
-		if (kernel_version == NULL ||
-		    ipc_devices[i].kernel_version == NULL) {
-			continue;
-		}
-
-		if (kernel_version != NULL &&
-		    ipc_devices[i].kernel_version != NULL &&
-		    strcmp(kernel_version,
-			   ipc_devices[i].kernel_version) != 0) {
-			continue;
-		}
-
-		/* Everything matches this particular index */
-		break;
+		return -1;
 	}
 
-	goto complete;
+	if (compatible == NULL)
+		return -1;
 
-error:
-	index = -1;
+	/* The list's entries in order: the first is the most specific */
+	for (offset = 0; offset < size;) {
+		const char *entry = compatible + offset;
+		size_t length = strnlen(entry, size - offset);
 
-complete:
-	if (name != NULL)
-		free(name);
+		for (i = 0; i < ipc_devices_count; i++) {
+			const char *const *list = ipc_devices[i].compatibles;
 
-	if (board_name != NULL)
-		free(board_name);
+			for (j = 0; list != NULL && list[j] != NULL; j++)
+				if (strlen(list[j]) == length &&
+				    memcmp(list[j], entry, length) == 0)
+					return (int) i;
+		}
 
-	if (kernel_version != NULL)
-		free(kernel_version);
+		offset += length + 1;
+	}
 
-	return index;
+	return -1;
 }
 
+/*
+ * Which device this is: the name in LIBSAMSUNG_IPC_DEVICE, else the name
+ * the library was built for (IPC_DEVICE_NAME), else the device tree.
+ */
+int ipc_device_detect(void)
+{
+	char compatible[1024];
+	const char *name;
+	ssize_t length;
+	unsigned int i;
+	int fd;
+
+	name = getenv("LIBSAMSUNG_IPC_DEVICE");
+	if (name != NULL && *name == '\0')
+		name = NULL;
+#ifdef IPC_DEVICE_NAME
+	if (name == NULL)
+		name = IPC_DEVICE_NAME;
+#endif
+	if (name != NULL)
+		return ipc_device_match(name, NULL, 0);
+
+	for (i = 0; ipc_compatible_paths[i] != NULL; i++) {
+		fd = open(ipc_compatible_paths[i], O_RDONLY | O_CLOEXEC);
+		if (fd < 0)
+			continue;
+
+		length = read(fd, compatible, sizeof(compatible));
+		close(fd);
+		if (length > 0)
+			return ipc_device_match(NULL, compatible,
+						(size_t) length);
+	}
+
+	return -1;
+}
+
+size_t ipc_client_firmware_nv_size(struct ipc_client *client)
+{
+	if (client == NULL || client->device == NULL)
+		return 0;
+
+	return toc_nv_size(client, client->device->firmware_partitions);
+}
 
 static struct ipc_client *ipc_dummy_client_create(void)
 {
@@ -212,17 +160,18 @@ static struct ipc_client *ipc_transport_client_create(int type)
 
 	switch (type) {
 	case IPC_CLIENT_TYPE_RFS:
-		client->ops = ipc_devices[device_index].rfs_ops;
+		client->ops = &shannon_rfs_ops;
 		break;
 	case IPC_CLIENT_TYPE_FMT:
-		client->ops = ipc_devices[device_index].fmt_ops;
+		client->ops = &shannon_fmt_ops;
 		break;
 	default:
 		goto error;
 	}
 
-	client->gprs_specs = ipc_devices[device_index].gprs_specs;
-	client->nv_data_specs = ipc_devices[device_index].nv_data_specs;
+	client->device = &ipc_devices[device_index];
+	client->gprs_specs = &shannon_gprs_specs;
+	client->nv_data_specs = &ipc_devices[device_index].nv_data_specs;
 
 	/* Handlers can be modified */
 	client->handlers = (struct ipc_client_handlers *) calloc(
@@ -230,10 +179,8 @@ static struct ipc_client *ipc_transport_client_create(int type)
 	if (client->handlers == NULL)
 		goto error;
 
-	if (ipc_devices[device_index].handlers != NULL) {
-		memcpy(client->handlers, ipc_devices[device_index].handlers,
-		       sizeof(struct ipc_client_handlers));
-	}
+	memcpy(client->handlers, &shannon_handlers,
+	       sizeof(struct ipc_client_handlers));
 
 	goto complete;
 

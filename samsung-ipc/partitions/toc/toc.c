@@ -17,8 +17,15 @@
  * along with libsamsung-ipc.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <errno.h>
 #include <stddef.h>
 #include <string.h>
+#include <unistd.h>
+
+#include <samsung-ipc.h>
+
+#include "ipc.h"
+#include "partitions/android/android.h"
 
 #include "toc.h"
 
@@ -41,4 +48,58 @@ struct firmware_toc_entry const *find_toc_entry(
 			return &toc[index];
 	}
 	return NULL;
+}
+
+int toc_open(struct ipc_client *client, const char *const *partitions,
+	     struct firmware_toc_entry *toc)
+{
+	int fd;
+
+	if (partitions == NULL) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	fd = open_android_modem_partition(client, partitions);
+	if (fd < 0) {
+		ipc_client_log(client, "%s: no firmware partition: %s",
+			       __func__, strerror(errno));
+		return -1;
+	}
+
+	if (data_read(client, fd, toc, N_TOC_ENTRIES * sizeof(*toc)) !=
+	    (ssize_t) (N_TOC_ENTRIES * sizeof(*toc))) {
+		ipc_client_log(client, "%s: reading the TOC failed: %s",
+			       __func__, strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	if (strncmp(toc[0].name, "TOC", sizeof(toc[0].name)) != 0) {
+		ipc_client_log(client, "%s: no TOC at the start of the image",
+			       __func__);
+		close(fd);
+		errno = EINVAL;
+		return -1;
+	}
+
+	return fd;
+}
+
+uint32_t toc_nv_size(struct ipc_client *client,
+		     const char *const *partitions)
+{
+	struct firmware_toc_entry toc[N_TOC_ENTRIES];
+	const struct firmware_toc_entry *nv;
+	int fd;
+
+	fd = toc_open(client, partitions, toc);
+	if (fd < 0)
+		return 0;
+
+	close(fd);
+
+	nv = find_toc_entry("NV", toc);
+
+	return nv != NULL ? nv->size : 0;
 }

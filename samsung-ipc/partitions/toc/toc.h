@@ -38,4 +38,17 @@ struct firmware_toc_entry const *find_toc_entry(
 	char const *name,
 	struct firmware_toc_entry const *toc);
 
+struct ipc_client;
+
+/*
+ * Opens the first of partitions that exists and reads its TOC into toc.
+ * Returns the open descriptor, or -1 (errno set).
+ */
+int toc_open(struct ipc_client *client, const char *const *partitions,
+	     struct firmware_toc_entry *toc);
+
+/* The size of the NV entry of the firmware's TOC, 0 if it cannot be read */
+uint32_t toc_nv_size(struct ipc_client *client,
+		     const char *const *partitions);
+
 #endif /* __TOC_PARTITION_TABLE_H__ */

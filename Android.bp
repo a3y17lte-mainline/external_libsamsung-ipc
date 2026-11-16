@@ -1,6 +1,5 @@
-// libsamsung-ipc for vendor daemons on Shannon modems (a3y17lte), as a
-// static library. The legacy Android.mk (system modules for the older
-// devices) is independent of it.
+// libsamsung-ipc for vendor daemons on Shannon modems, as a static library.
+// The device is found at run time (device tree compatible).
 cc_library_static {
     name: "libsamsung-ipc-shannon",
     vendor: true,
@@ -13,8 +12,8 @@ cc_library_static {
     export_include_dirs: ["include"],
     shared_libs: ["libcrypto"],
     cflags: [
-        "-DIPC_DEVICE_NAME=\"a3y17lte\"",
-        "-w",
-        "-Wno-error",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
     ],
 }

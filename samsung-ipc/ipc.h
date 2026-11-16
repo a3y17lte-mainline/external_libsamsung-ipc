@@ -88,8 +88,11 @@ struct ipc_client_nv_data_specs {
 	size_t nv_data_chunk_size;
 };
 
+struct ipc_device_desc;
+
 struct ipc_client {
 	int type;
+	const struct ipc_device_desc *device;
 
 	void (*log_callback)(void *log_data, const char *message);
 	void *log_data;
@@ -115,5 +118,18 @@ void ipc_client_log(struct ipc_client *client, const char *message, ...)
  */
 int ipc_fds_poll(int fd, struct ipc_poll_fds *fds, struct timeval *timeout,
 		 int *ready);
+
+/*
+ * The device table index for a device name, or else for a device tree
+ * compatible list (NUL separated strings, as in /proc/device-tree); -1 if
+ * nothing matches. A name that is given but unknown matches nothing.
+ */
+int ipc_device_match(const char *name, const char *compatible, size_t size);
+
+/*
+ * The NV size in the client's firmware image (its TOC), 0 if the image
+ * cannot be read
+ */
+size_t ipc_client_firmware_nv_size(struct ipc_client *client);
 
 #endif /* __IPC_H__ */

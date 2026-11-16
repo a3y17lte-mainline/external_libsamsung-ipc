@@ -23,7 +23,7 @@
  * the automake build:
  *
  *   clang -g -O1 -fsanitize=fuzzer,address,undefined -Iinclude \
- *     -Isamsung-ipc -DIPC_DEVICE_NAME='"a3y17lte"' -o fuzz \
+ *     -Isamsung-ipc -o fuzz \
  *     samsung-ipc/tests/fuzz.c \
  *     $(find samsung-ipc -name '*.c' -not -path '*tests*') -lcrypto
  *   ./fuzz -max_len=8192 corpus/
@@ -176,6 +176,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 
 	if (size < 1)
 		return 0;
+
+	setenv("LIBSAMSUNG_IPC_DEVICE", "a3y17lte", 0);
 
 	memset(&transport, 0, sizeof(transport));
 	transport.data = data + 1;
