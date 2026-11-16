@@ -20,4 +20,5 @@ samsung_ipcinclude_HEADERS = \
 	imei.h \
 	rfs.h \
 	gen.h \
+	shannon.h \
 	$(NULL)

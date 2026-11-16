@@ -30,6 +30,7 @@
 #include <ipc.h>
 #include "partitions/android.h"
 #include "shannon_data.h"
+#include "a3y17lte_data.h"
 
 struct test {
 	char *name;
@@ -56,6 +57,50 @@ static struct test tests[] = {
 	{
 		"gprs_lte_attach_apn_info_setup",
 		test_gprs_lte_attach_apn_info_setup
+	},
+	{
+		"shannon_layout_sizes",
+		test_shannon_layout_sizes
+	},
+	{
+		"shannon_sim_apps_info",
+		test_shannon_sim_apps_info
+	},
+	{
+		"shannon_rsim_aid_setup",
+		test_shannon_rsim_aid_setup
+	},
+	{
+		"shannon_apdu_setup",
+		test_shannon_apdu_setup
+	},
+	{
+		"shannon_ims_auth",
+		test_shannon_ims_auth
+	},
+	{
+		"shannon_ip_configuration",
+		test_shannon_ip_configuration
+	},
+	{
+		"shannon_call_status",
+		test_shannon_call_status
+	},
+	{
+		"shannon_set_apn_info",
+		test_shannon_set_apn_info
+	},
+	{
+		"shannon_ims_channel",
+		test_shannon_ims_channel
+	},
+	{
+		"shannon_ims_pdn",
+		test_shannon_ims_pdn
+	},
+	{
+		"shannon_dedicated_bearer",
+		test_shannon_dedicated_bearer
 	},
 };
 

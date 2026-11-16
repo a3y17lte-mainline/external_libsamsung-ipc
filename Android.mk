@@ -56,6 +56,7 @@ endif
 libsamsung_ipc_local_src_files := \
 	samsung-ipc/call.c \
 	samsung-ipc/gen.c \
+	samsung-ipc/shannon.c \
 	samsung-ipc/gprs.c \
 	samsung-ipc/ipc.c \
 	samsung-ipc/ipc_strings.c \

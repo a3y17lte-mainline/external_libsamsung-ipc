@@ -196,5 +196,6 @@ void *string2data(const char *string);
 #include "imei.h"
 #include "rfs.h"
 #include "gen.h"
+#include "shannon.h"
 
 #endif /*  __SAMSUNG_IPC_H__ */

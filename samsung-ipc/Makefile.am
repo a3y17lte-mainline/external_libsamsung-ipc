@@ -29,6 +29,7 @@ libsamsung_ipc_la_SOURCES = \
 	gprs.c \
 	rfs.c \
 	gen.c \
+	shannon.c \
 	$(NULL)
 
 include devices/Makefile.am
