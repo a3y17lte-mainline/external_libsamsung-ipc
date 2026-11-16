@@ -104,6 +104,16 @@ struct ipc_client {
  * Helpers
  */
 
-void ipc_client_log(struct ipc_client *client, const char *message, ...);
+void ipc_client_log(struct ipc_client *client, const char *message, ...)
+	__attribute__((format(printf, 2, 3)));
+
+/*
+ * Waits for fd or one of fds to be readable (or closed). On return the
+ * entries of fds that are not ready are -1 and fds->count is the number of
+ * ready ones; *ready tells whether fd itself is. Returns the number of ready
+ * descriptors, 0 after the timeout, -1 on error (fds is left alone then).
+ */
+int ipc_fds_poll(int fd, struct ipc_poll_fds *fds, struct timeval *timeout,
+		 int *ready);
 
 #endif /* __IPC_H__ */

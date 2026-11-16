@@ -20,6 +20,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,47 +40,75 @@
 
 #include <samsung-ipc.h>
 
+#include "ipc.h"
+
 ssize_t data_read(__attribute__((unused)) struct ipc_client *client, int fd,
 		  void *buf, size_t count)
 {
+	unsigned char *p = buf;
+	size_t done = 0;
+
 	/* From read(2): "According  to POSIX.1, if count is greater than
 	 * SSIZE_MAX, the result is implementation-defined"
 	 */
-	ssize_t remaining = (ssize_t)count;
-
-	while (remaining > 0) {
-		ssize_t rc;
-
-		rc = read(fd, buf, count);
-		if (rc == -1)
-			/* errno is passed to the caller */
-			return rc;
-		remaining -= rc;
+	if (buf == NULL || count > SSIZE_MAX) {
+		errno = EINVAL;
+		return -1;
 	}
 
-	return count;
+	while (done < count) {
+		ssize_t rc;
+
+		rc = read(fd, p + done, count - done);
+		if (rc == -1) {
+			if (errno == EINTR)
+				continue;
+			/* errno is passed to the caller */
+			return rc;
+		}
+		if (rc == 0) {
+			/* The end of the file before count bytes */
+			errno = ENODATA;
+			return -1;
+		}
+		done += rc;
+	}
+
+	return (ssize_t) count;
 }
 
 ssize_t data_write(__attribute__((unused)) struct ipc_client *client, int fd,
 		   const void *buf, size_t count)
 {
+	const unsigned char *p = buf;
+	size_t done = 0;
+
 	/* From write(2): "According  to POSIX.1, if count is greater than
 	 * SSIZE_MAX, the result is implementation-defined"
 	 */
-	ssize_t remaining = (ssize_t)count;
-
-	while (remaining > 0) {
-		ssize_t rc;
-
-		rc = write(fd, buf, count);
-		if (rc == -1)
-			/* errno is passed to the caller */
-			return rc;
-		remaining -= rc;
+	if (buf == NULL || count > SSIZE_MAX) {
+		errno = EINVAL;
+		return -1;
 	}
 
-	return count;
+	while (done < count) {
+		ssize_t rc;
 
+		rc = write(fd, p + done, count - done);
+		if (rc == -1) {
+			if (errno == EINTR)
+				continue;
+			/* errno is passed to the caller */
+			return rc;
+		}
+		if (rc == 0) {
+			errno = EIO;
+			return -1;
+		}
+		done += rc;
+	}
+
+	return (ssize_t) count;
 }
 
 void *file_data_read(struct ipc_client *client, const char *path, size_t size,
@@ -128,6 +158,8 @@ void *file_data_read(struct ipc_client *client, const char *path, size_t size,
 	}
 
 	data = calloc(1, size);
+	if (data == NULL)
+		goto error;
 
 	p = (unsigned char *) data;
 
@@ -208,7 +240,7 @@ int file_data_write(struct ipc_client *client, const char *path,
 
 	seek = lseek(fd, (off_t) offset, SEEK_SET);
 	if (seek < (off_t) offset) {
-		rc = errno;
+		rc = seek < 0 ? errno : EIO;
 		ipc_client_log(client, "%s failed: seek < (off_t) offset",
 			       __func__);
 		goto error;
@@ -222,8 +254,9 @@ int file_data_write(struct ipc_client *client, const char *path,
 			   size - count > chunk_size ?
 			   chunk_size : size - count);
 		if (rc <= 0) {
-			ipc_client_log(client, "%s: write failed with error %d",
-				       __func__, rc);
+			rc = rc < 0 ? errno : EIO;
+			ipc_client_log(client, "%s: write failed with error %d: %s",
+				       __func__, rc, strerror(rc));
 			goto error;
 		}
 
@@ -231,8 +264,9 @@ int file_data_write(struct ipc_client *client, const char *path,
 		count += rc;
 	}
 
-	if (fd >= 0)
-		close(fd);
+	/* NV data: on the disk before the caller goes on */
+	fsync(fd);
+	close(fd);
 
 	return 0;
 
@@ -285,6 +319,70 @@ error:
 	}
 }
 
+int ipc_fds_poll(int fd, struct ipc_poll_fds *fds, struct timeval *timeout,
+		 int *ready)
+{
+	const short events = POLLIN | POLLHUP | POLLERR;
+	struct pollfd *pollfds;
+	unsigned int count = 0;
+	unsigned int ready_count;
+	unsigned int i;
+	int timeout_ms = -1;
+	int rc;
+
+	if (fd < 0)
+		return -1;
+
+	if (fds != NULL && fds->fds != NULL)
+		count = fds->count;
+
+	pollfds = calloc(count + 1, sizeof(struct pollfd));
+	if (pollfds == NULL)
+		return -1;
+
+	pollfds[0].fd = fd;
+	pollfds[0].events = POLLIN;
+	for (i = 0; i < count; i++) {
+		/* poll() skips negative descriptors */
+		pollfds[i + 1].fd = fds->fds[i];
+		pollfds[i + 1].events = POLLIN;
+	}
+
+	if (timeout != NULL) {
+		long long ms = (long long) timeout->tv_sec * 1000 +
+			       (timeout->tv_usec + 999) / 1000;
+
+		timeout_ms = ms > INT_MAX ? INT_MAX : (int) ms;
+	}
+
+	do {
+		rc = poll(pollfds, count + 1, timeout_ms);
+	} while (rc < 0 && errno == EINTR);
+
+	if (rc < 0) {
+		free(pollfds);
+		return -1;
+	}
+
+	if (ready != NULL)
+		*ready = !!(pollfds[0].revents & events);
+
+	ready_count = 0;
+	for (i = 0; i < count; i++) {
+		if (fds->fds[i] >= 0 && (pollfds[i + 1].revents & events))
+			ready_count++;
+		else
+			fds->fds[i] = -1;
+	}
+
+	if (count > 0)
+		fds->count = ready_count;
+
+	free(pollfds);
+
+	return rc;
+}
+
 int network_iface_up(const char *iface, int domain, int type)
 {
 	struct ifreq ifr;
@@ -294,8 +392,11 @@ int network_iface_up(const char *iface, int domain, int type)
 	if (iface == NULL)
 		return -1;
 
+	if (strlen(iface) >= IFNAMSIZ)
+		return -1;
+
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
+	strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
 
 	fd = socket(domain, type, 0);
 	if (fd < 0)
@@ -333,8 +434,11 @@ int network_iface_down(const char *iface, int domain, int type)
 	if (iface == NULL)
 		return -1;
 
+	if (strlen(iface) >= IFNAMSIZ)
+		return -1;
+
 	memset(&ifr, 0, sizeof(ifr));
-	strncpy(ifr.ifr_name, iface, IFNAMSIZ);
+	strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
 
 	fd = socket(domain, type, 0);
 	if (fd < 0)
@@ -377,9 +481,11 @@ int sysfs_value_read(const char *path)
 	if (fd < 0)
 		goto error;
 
-	rc = read(fd, &buffer, sizeof(buffer));
+	rc = read(fd, &buffer, sizeof(buffer) - 1);
 	if (rc <= 0)
 		goto error;
+
+	buffer[rc] = '\0';
 
 	value = atoi(buffer);
 	goto complete;
@@ -439,7 +545,10 @@ char *sysfs_string_read(const char *path, size_t length)
 	if (fd < 0)
 		goto error;
 
-	string = (char *) calloc(1, length);
+	/* One more byte, so that the string always ends */
+	string = (char *) calloc(1, length + 1);
+	if (string == NULL)
+		goto error;
 
 	rc = read(fd, string, length);
 	if (rc <= 0)
@@ -516,6 +625,8 @@ char *data2string(const void *data, size_t size)
 		return NULL;
 
 	string = (char *) calloc(1, length);
+	if (string == NULL)
+		return NULL;
 
 	p = string;
 
@@ -575,6 +686,8 @@ void *string2data(const char *string)
 		return NULL;
 
 	data = calloc(1, size);
+	if (data == NULL)
+		return NULL;
 
 	p = (unsigned char *) data;
 

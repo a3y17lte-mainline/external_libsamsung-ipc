@@ -19,13 +19,13 @@
  */
 
 #define _GNU_SOURCE
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/select.h>
 
 #include <samsung-ipc.h>
 
@@ -68,14 +68,131 @@ int xmm626_kernel_smdk4412_boot_power(
 	return 0;
 }
 
+/* Writes a whole frame; the transport may take it in pieces */
+static int xmm626_kernel_smdk4412_frame_write(struct ipc_client *client,
+					      const void *buffer, size_t length)
+{
+	const unsigned char *p = buffer;
+	size_t count = 0;
+	int rc;
+
+	while (count < length) {
+		rc = client->handlers->write(client,
+					     client->handlers->transport_data,
+					     p + count, length - count);
+		if (rc <= 0)
+			return -1;
+
+		count += rc;
+	}
+
+	return 0;
+}
+
+/*
+ * Reads one frame: a header of header_size bytes that starts with the
+ * frame's length (16 bits for FMT, 32 bits for RFS), then the data.
+ * The transport hands a frame over in one or more reads. The frame's own
+ * length is checked against the header size and limit before it is used, and
+ * whatever a read returns beyond it is not part of the frame.
+ */
+static void *xmm626_kernel_smdk4412_frame_read(struct ipc_client *client,
+					       size_t header_size, int rfs,
+					       size_t limit, size_t *size)
+{
+	unsigned char *buffer;
+	unsigned char *p;
+	size_t length;
+	size_t count;
+	int rc;
+
+	buffer = calloc(1, XMM626_DATA_SIZE);
+	if (buffer == NULL)
+		return NULL;
+
+	rc = client->handlers->read(client, client->handlers->transport_data,
+				    buffer, XMM626_DATA_SIZE);
+	if (rc < (int) header_size) {
+		ipc_client_log(client, "Reading the %s header failed",
+			       rfs ? "RFS" : "FMT");
+		goto error;
+	}
+
+	count = (size_t) rc;
+
+	if (rfs)
+		length = ((struct ipc_rfs_header *) buffer)->length;
+	else
+		length = ((struct ipc_fmt_header *) buffer)->length;
+
+	if (length < header_size || length > limit) {
+		ipc_client_log(client, "Invalid %s header length: %zu",
+			       rfs ? "RFS" : "FMT", length);
+		goto error;
+	}
+
+	if (count > length) {
+		ipc_client_log(client,
+			       "Dropping %zu bytes after the %s message",
+			       count - length, rfs ? "RFS" : "FMT");
+		count = length;
+	}
+
+	if (length > XMM626_DATA_SIZE) {
+		p = realloc(buffer, length);
+		if (p == NULL)
+			goto error;
+
+		buffer = p;
+	}
+
+	while (count < length) {
+		rc = client->handlers->read(client,
+					    client->handlers->transport_data,
+					    buffer + count, length - count);
+		if (rc <= 0) {
+			ipc_client_log(client, "Reading %s data failed",
+				       rfs ? "RFS" : "FMT");
+			goto error;
+		}
+
+		count += rc;
+	}
+
+	*size = length;
+
+	return buffer;
+
+error:
+	free(buffer);
+
+	return NULL;
+}
+
+/* The data after the header, as the message's own copy */
+static int xmm626_kernel_smdk4412_message_data(struct ipc_message *message,
+					       const unsigned char *frame,
+					       size_t size, size_t header_size)
+{
+	if (size == header_size)
+		return 0;
+
+	message->data = malloc(size - header_size);
+	if (message->data == NULL)
+		return -1;
+
+	memcpy(message->data, frame + header_size, size - header_size);
+	message->size = size - header_size;
+
+	return 0;
+}
+
 int xmm626_kernel_smdk4412_fmt_send(struct ipc_client *client,
 				    struct ipc_message *message)
 {
 	struct ipc_fmt_header header;
-	void *buffer;
+	unsigned char *buffer;
 	size_t length;
-	size_t count;
-	unsigned char *p;
 	int rc;
 
 	if (client == NULL || client->handlers == NULL ||
@@ -83,45 +200,34 @@ int xmm626_kernel_smdk4412_fmt_send(struct ipc_client *client,
 		return -1;
 	}
 
+	/* The header's length field has 16 bits */
+	if (message->size > UINT16_MAX - sizeof(struct ipc_fmt_header) ||
+	    (message->size > 0 && message->data == NULL)) {
+		ipc_client_log(client, "Invalid FMT message size: %zu",
+			       message->size);
+		return -1;
+	}
+
 	ipc_fmt_header_setup(&header, message);
 
-	length = header.length;
+	length = sizeof(struct ipc_fmt_header) + message->size;
 	buffer = calloc(1, length);
+	if (buffer == NULL)
+		return -1;
 
 	memcpy(buffer, &header, sizeof(struct ipc_fmt_header));
-	if (message->data != NULL && message->size > 0) {
-		memcpy((void *) ((unsigned char *) buffer +
-				 sizeof(struct ipc_fmt_header)),
-		       message->data, message->size);
+	if (message->size > 0) {
+		memcpy(buffer + sizeof(struct ipc_fmt_header), message->data,
+		       message->size);
 	}
 
 	ipc_client_log_send(client, message, __func__);
 
-	p = (unsigned char *) buffer;
+	rc = xmm626_kernel_smdk4412_frame_write(client, buffer, length);
+	if (rc < 0)
+		ipc_client_log(client, "Writing FMT data failed");
 
-	count = 0;
-	while (count < length) {
-		rc = client->handlers->write(client,
-					     client->handlers->transport_data,
-					     p, length - count);
-		if (rc <= 0) {
-			ipc_client_log(client, "Writing FMT data failed");
-			goto error;
-		}
-
-		count += rc;
-		p += rc;
-	}
-
-	rc = 0;
-	goto complete;
-
-error:
-	rc = -1;
-
-complete:
-	if (buffer != NULL)
-		free(buffer);
+	free(buffer);
 
 	return rc;
 }
@@ -129,11 +235,8 @@ complete:
 int xmm626_kernel_smdk4412_fmt_recv(struct ipc_client *client,
 				    struct ipc_message *message)
 {
-	struct ipc_fmt_header *header;
-	void *buffer = NULL;
-	size_t length;
-	size_t count;
-	unsigned char *p;
+	unsigned char *frame;
+	size_t size;
 	int rc;
 
 	if (client == NULL || client->handlers == NULL ||
@@ -141,61 +244,19 @@ int xmm626_kernel_smdk4412_fmt_recv(struct ipc_client *client,
 		return -1;
 	}
 
-	length = XMM626_DATA_SIZE;
-	buffer = calloc(1, length);
+	frame = xmm626_kernel_smdk4412_frame_read(
+		client, sizeof(struct ipc_fmt_header), 0, UINT16_MAX, &size);
+	if (frame == NULL)
+		return -1;
 
-	rc = client->handlers->read(client, client->handlers->transport_data,
-				    buffer, length);
-	if (rc < (int) sizeof(struct ipc_fmt_header)) {
-		ipc_client_log(client, "Reading FMT header failed");
-		goto error;
-	}
+	ipc_fmt_message_setup((struct ipc_fmt_header *) frame, message);
 
-	header = (struct ipc_fmt_header *) buffer;
+	rc = xmm626_kernel_smdk4412_message_data(
+		message, frame, size, sizeof(struct ipc_fmt_header));
+	if (rc == 0)
+		ipc_client_log_recv(client, message, __func__);
 
-	ipc_fmt_message_setup(header, message);
-
-	if (header->length > sizeof(struct ipc_fmt_header)) {
-		message->size = header->length - sizeof(struct ipc_fmt_header);
-		message->data = calloc(1, message->size);
-
-		p = (unsigned char *) message->data;
-
-		count = rc - sizeof(struct ipc_fmt_header);
-		if (count > 0) {
-			memcpy(p,
-			       (void *) ((unsigned char *) buffer +
-					 sizeof(struct ipc_fmt_header)),
-			       count);
-			p += count;
-		}
-
-		while (count < message->size) {
-			rc = client->handlers->read(
-				client, client->handlers->transport_data, p,
-				message->size - count);
-			if (rc <= 0) {
-				ipc_client_log(client,
-					       "Reading FMT data failed");
-				goto error;
-			}
-
-			count += rc;
-			p += rc;
-		}
-	}
-
-	ipc_client_log_recv(client, message, __func__);
-
-	rc = 0;
-	goto complete;
-
-error:
-	rc = -1;
-
-complete:
-	if (buffer != NULL)
-		free(buffer);
+	free(frame);
 
 	return rc;
 }
@@ -204,10 +265,8 @@ int xmm626_kernel_smdk4412_rfs_send(struct ipc_client *client,
 				    struct ipc_message *message)
 {
 	struct ipc_rfs_header header;
-	void *buffer;
+	unsigned char *buffer;
 	size_t length;
-	size_t count;
-	unsigned char *p;
 	int rc;
 
 	if (client == NULL || client->handlers == NULL ||
@@ -215,47 +274,34 @@ int xmm626_kernel_smdk4412_rfs_send(struct ipc_client *client,
 		return -1;
 	}
 
+	if (message->size >
+	    XMM626_DATA_SIZE_LIMIT - sizeof(struct ipc_rfs_header) ||
+	    (message->size > 0 && message->data == NULL)) {
+		ipc_client_log(client, "Invalid RFS message size: %zu",
+			       message->size);
+		return -1;
+	}
+
 	ipc_rfs_header_setup(&header, message);
 
-	length = header.length;
+	length = sizeof(struct ipc_rfs_header) + message->size;
 	buffer = calloc(1, length);
+	if (buffer == NULL)
+		return -1;
 
 	memcpy(buffer, &header, sizeof(struct ipc_rfs_header));
-	if (message->data != NULL && message->size > 0) {
-		memcpy((void *) (
-			       (unsigned char *) buffer +
-			       sizeof(struct ipc_rfs_header)),
-		       message->data,
+	if (message->size > 0) {
+		memcpy(buffer + sizeof(struct ipc_rfs_header), message->data,
 		       message->size);
 	}
 
 	ipc_client_log_send(client, message, __func__);
 
-	p = (unsigned char *) buffer;
+	rc = xmm626_kernel_smdk4412_frame_write(client, buffer, length);
+	if (rc < 0)
+		ipc_client_log(client, "Writing RFS data failed");
 
-	count = 0;
-	while (count < length) {
-		rc = client->handlers->write(client,
-					     client->handlers->transport_data,
-					     p, length - count);
-		if (rc <= 0) {
-			ipc_client_log(client, "Writing RFS data failed");
-			goto error;
-		}
-
-		count += rc;
-		p += rc;
-	}
-
-	rc = 0;
-	goto complete;
-
-error:
-	rc = -1;
-
-complete:
-	if (buffer != NULL)
-		free(buffer);
+	free(buffer);
 
 	return rc;
 }
@@ -263,11 +309,8 @@ complete:
 int xmm626_kernel_smdk4412_rfs_recv(struct ipc_client *client,
 				    struct ipc_message *message)
 {
-	struct ipc_rfs_header *header;
-	void *buffer = NULL;
-	size_t length;
-	size_t count;
-	unsigned char *p;
+	unsigned char *frame;
+	size_t size;
 	int rc;
 
 	if (client == NULL || client->handlers == NULL ||
@@ -275,66 +318,20 @@ int xmm626_kernel_smdk4412_rfs_recv(struct ipc_client *client,
 		return -1;
 	}
 
-	length = XMM626_DATA_SIZE;
-	buffer = calloc(1, length);
+	frame = xmm626_kernel_smdk4412_frame_read(
+		client, sizeof(struct ipc_rfs_header), 1,
+		XMM626_DATA_SIZE_LIMIT, &size);
+	if (frame == NULL)
+		return -1;
 
-	rc = client->handlers->read(client, client->handlers->transport_data,
-				    buffer, length);
-	if (rc < (int) sizeof(struct ipc_rfs_header)) {
-		ipc_client_log(client, "Reading RFS header failed");
-		goto error;
-	}
+	ipc_rfs_message_setup((struct ipc_rfs_header *) frame, message);
 
-	header = (struct ipc_rfs_header *) buffer;
-	if (header->length > XMM626_DATA_SIZE_LIMIT) {
-		ipc_client_log(client, "Invalid RFS header length: %u",
-			       header->length);
-		goto error;
-	}
+	rc = xmm626_kernel_smdk4412_message_data(
+		message, frame, size, sizeof(struct ipc_rfs_header));
+	if (rc == 0)
+		ipc_client_log_recv(client, message, __func__);
 
-	ipc_rfs_message_setup(header, message);
-
-	if (header->length > sizeof(struct ipc_rfs_header)) {
-		message->size = header->length - sizeof(struct ipc_rfs_header);
-		message->data = calloc(1, message->size);
-
-		p = (unsigned char *) message->data;
-
-		count = rc - sizeof(struct ipc_rfs_header);
-		if (count > 0) {
-			memcpy(p,
-			       (void *) ((unsigned char *) buffer +
-					 sizeof(struct ipc_rfs_header)),
-			       count);
-			p += count;
-		}
-
-		while (count < message->size) {
-			rc = client->handlers->read(
-				client, client->handlers->transport_data, p,
-				message->size - count);
-			if (rc <= 0) {
-				ipc_client_log(client,
-					       "Reading RFS data failed");
-				goto error;
-			}
-
-			count += rc;
-			p += rc;
-		}
-	}
-
-	ipc_client_log_recv(client, message, __func__);
-
-	rc = 0;
-	goto complete;
-
-error:
-	rc = -1;
-
-complete:
-	if (buffer != NULL)
-		free(buffer);
+	free(frame);
 
 	return rc;
 }
@@ -414,50 +411,20 @@ int xmm626_kernel_smdk4412_poll(
 	int fd, struct ipc_poll_fds *fds, struct timeval *timeout)
 {
 	int status;
-	fd_set set;
-	int fd_max;
-	unsigned int i;
-	unsigned int count;
+	int ready;
 	int rc;
 
 	if (fd < 0)
 		return -1;
 
-	FD_ZERO(&set);
-	FD_SET(fd, &set);
+	rc = ipc_fds_poll(fd, fds, timeout, &ready);
+	if (rc < 0)
+		return -1;
 
-	fd_max = fd;
-
-	if (fds != NULL && fds->fds != NULL && fds->count > 0) {
-		for (i = 0; i < fds->count; i++) {
-			if (fds->fds[i] >= 0) {
-				FD_SET(fds->fds[i], &set);
-
-				if (fds->fds[i] > fd_max)
-					fd_max = fds->fds[i];
-			}
-		}
-	}
-
-	rc = select(fd_max + 1, &set, NULL, NULL, timeout);
-
-	if (FD_ISSET(fd, &set)) {
+	if (ready) {
 		status = ioctl(fd, IOCTL_MODEM_STATUS, 0);
 		if (status != STATE_ONLINE && status != STATE_BOOTING)
 			return -1;
-	}
-
-	if (fds != NULL && fds->fds != NULL && fds->count > 0) {
-		count = fds->count;
-
-		for (i = 0; i < fds->count; i++) {
-			if (!FD_ISSET(fds->fds[i], &set)) {
-				fds->fds[i] = -1;
-				count--;
-			}
-		}
-
-		fds->count = count;
 	}
 
 	return rc;
@@ -468,10 +435,13 @@ char *xmm626_kernel_smdk4412_gprs_get_iface(
 {
 	char *iface = NULL;
 
-	if (cid > XMM626_SEC_MODEM_GPRS_IFACE_COUNT)
+	if (cid == 0 || cid > XMM626_SEC_MODEM_GPRS_IFACE_COUNT)
 		return NULL;
 
-	asprintf(&iface, "%s%d", XMM626_SEC_MODEM_GPRS_IFACE_PREFIX, cid - 1);
+	if (asprintf(&iface, "%s%u", XMM626_SEC_MODEM_GPRS_IFACE_PREFIX,
+		     cid - 1) < 0) {
+		return NULL;
+	}
 
 	return iface;
 }

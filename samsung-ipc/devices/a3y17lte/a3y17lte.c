@@ -42,7 +42,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/select.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
@@ -258,10 +257,6 @@ int a3y17lte_poll(struct ipc_client *client, void *data,
 		  struct ipc_poll_fds *fds, struct timeval *timeout)
 {
 	struct a3y17lte_transport_data *transport_data = data;
-	unsigned int i, count;
-	fd_set set;
-	int fd_max;
-	int rc;
 
 	if (transport_data == NULL)
 		return -1;
@@ -270,37 +265,7 @@ int a3y17lte_poll(struct ipc_client *client, void *data,
 		return herolte_poll(client, &transport_data->herolte, fds,
 				    timeout);
 
-	if (transport_data->fd < 0)
-		return -1;
-
-	FD_ZERO(&set);
-	FD_SET(transport_data->fd, &set);
-	fd_max = transport_data->fd;
-
-	if (fds != NULL && fds->fds != NULL) {
-		for (i = 0; i < fds->count; i++) {
-			if (fds->fds[i] < 0)
-				continue;
-			FD_SET(fds->fds[i], &set);
-			if (fds->fds[i] > fd_max)
-				fd_max = fds->fds[i];
-		}
-	}
-
-	rc = select(fd_max + 1, &set, NULL, NULL, timeout);
-
-	if (fds != NULL && fds->fds != NULL) {
-		count = fds->count;
-		for (i = 0; i < fds->count; i++) {
-			if (fds->fds[i] >= 0 && !FD_ISSET(fds->fds[i], &set)) {
-				fds->fds[i] = -1;
-				count--;
-			}
-		}
-		fds->count = count;
-	}
-
-	return rc;
+	return ipc_fds_poll(transport_data->fd, fds, timeout, NULL);
 }
 
 int a3y17lte_power_on(__attribute__((unused)) struct ipc_client *client,
