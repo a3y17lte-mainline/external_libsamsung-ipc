@@ -234,6 +234,8 @@ int main(int argc, char *argv[])
 		goto error;
 	}
 
+	ipc_client_destroy(client);
+
 	return 0;
 
 error:
