@@ -31,6 +31,7 @@
 #include "partitions/android.h"
 #include "shannon_data.h"
 #include "a3y17lte_data.h"
+#include "robustness.h"
 
 struct test {
 	char *name;
@@ -101,6 +102,30 @@ static struct test tests[] = {
 	{
 		"shannon_dedicated_bearer",
 		test_shannon_dedicated_bearer
+	},
+	{
+		"helpers_message_bounds",
+		test_helpers_message_bounds
+	},
+	{
+		"frame_recv",
+		test_frame_recv
+	},
+	{
+		"frame_send",
+		test_frame_send
+	},
+	{
+		"data_read_write",
+		test_data_read_write
+	},
+	{
+		"fds_poll",
+		test_fds_poll
+	},
+	{
+		"nv_data",
+		test_nv_data
 	},
 };
 

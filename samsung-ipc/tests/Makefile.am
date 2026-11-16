@@ -20,6 +20,8 @@ libsamsung_ipc_test_SOURCES = \
 	shannon_data.h \
 	a3y17lte_data.c \
 	a3y17lte_data.h \
+	robustness.c \
+	robustness.h \
 	$(NULL)
 
 libsamsung_ipc_test_LDADD = $(top_builddir)/samsung-ipc/libsamsung-ipc.la
