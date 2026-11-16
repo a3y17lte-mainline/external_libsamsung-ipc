@@ -96,7 +96,8 @@ int ipc_client_gprs_handlers_register(
 			       unsigned int cid),
 	void *gprs_data);
 
-void ipc_client_log(struct ipc_client *client, const char *message, ...);
+void ipc_client_log(struct ipc_client *client, const char *message, ...)
+	__attribute__((format(printf, 2, 3)));
 int ipc_client_log_callback_register(
 	struct ipc_client *client,
 	void (*log_callback)(void *log_data, const char *message),

@@ -67,11 +67,11 @@ int ipc_device_detect(void)
 	if (fd < 0)
 		goto error;
 
-	length = read(fd, &buffer, sizeof(buffer));
+	/* The last byte stays zero: the buffer is parsed as a string */
+	length = read(fd, &buffer, sizeof(buffer) - 1);
+	close(fd);
 	if (length == -1)
 		goto error;
-
-	close(fd);
 
 	line = strtok(buffer, "\n");
 	while (line != NULL) {
@@ -79,6 +79,9 @@ int ipc_device_detect(void)
 			/* In arch/arm/kernel/setup.c, Linux does the following:
 			 * seq_printf(m, "Hardware\t: %s\n", machine_name);
 			 */
+			if (strlen(line) < 8 + 3)
+				break;
+
 			p = line + 8 + 3;
 			c = p;
 
@@ -176,6 +179,9 @@ static struct ipc_client *ipc_dummy_client_create(void)
 	struct ipc_client *client = NULL;
 
 	client = (struct ipc_client *) calloc(1, sizeof(struct ipc_client));
+	if (client == NULL)
+		return NULL;
+
 	client->type = IPC_CLIENT_TYPE_DUMMY;
 
 	return client;
@@ -195,10 +201,13 @@ static struct ipc_client *ipc_transport_client_create(int type)
 		goto error;
 
 	device_index = (unsigned int) rc;
-	if (device_index > ipc_devices_count)
+	if (device_index >= ipc_devices_count)
 		goto error;
 
 	client = (struct ipc_client *) calloc(1, sizeof(struct ipc_client));
+	if (client == NULL)
+		goto error;
+
 	client->type = type;
 
 	switch (type) {
@@ -218,6 +227,8 @@ static struct ipc_client *ipc_transport_client_create(int type)
 	/* Handlers can be modified */
 	client->handlers = (struct ipc_client_handlers *) calloc(
 		1, sizeof(struct ipc_client_handlers));
+	if (client->handlers == NULL)
+		goto error;
 
 	if (ipc_devices[device_index].handlers != NULL) {
 		memcpy(client->handlers, ipc_devices[device_index].handlers,
@@ -401,23 +412,19 @@ int ipc_client_recv(struct ipc_client *client, struct ipc_message *message)
 
 int ipc_client_open(struct ipc_client *client)
 {
-	if (client == NULL || client->handlers == NULL ||
-	    client->handlers->open == NULL) {
-		if (client == NULL) {
-			ipc_client_log(client, "%s failed: client is NULL",
-				       __func__);
-		}
-		if (client->handlers == NULL) {
-			ipc_client_log(client,
-				       "%s failed: client->handlers is NULL",
-				       __func__);
-		}
-		if (client->handlers->open == NULL) {
-			ipc_client_log(
-				client,
-				"%s failed: client->handlers->open is NULL",
-				__func__);
-		}
+	if (client == NULL)
+		return -1;
+
+	if (client->handlers == NULL) {
+		ipc_client_log(client, "%s failed: client->handlers is NULL",
+			       __func__);
+		return -1;
+	}
+
+	if (client->handlers->open == NULL) {
+		ipc_client_log(client,
+			       "%s failed: client->handlers->open is NULL",
+			       __func__);
 		return -1;
 	}
 
@@ -503,7 +510,7 @@ int ipc_client_data_create(struct ipc_client *client)
 	return client->handlers->data_create(client,
 					     &client->handlers->transport_data,
 					     &client->handlers->power_data,
-					     &client->handlers->power_data);
+					     &client->handlers->gprs_data);
 }
 
 int ipc_client_data_destroy(struct ipc_client *client)
@@ -516,7 +523,7 @@ int ipc_client_data_destroy(struct ipc_client *client)
 	return client->handlers->data_destroy(client,
 					      client->handlers->transport_data,
 					      client->handlers->power_data,
-					      client->handlers->power_data);
+					      client->handlers->gprs_data);
 }
 
 char *ipc_client_gprs_get_iface(struct ipc_client *client, unsigned int cid)

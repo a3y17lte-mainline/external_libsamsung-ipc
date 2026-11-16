@@ -47,7 +47,6 @@ int ipc_data_dump(struct ipc_client *client, const void *data, size_t size)
 	unsigned int cols_count = 2;
 	int spacer;
 	char string[81] = { 0 };
-	char final[161] = { 0 };
 	size_t length;
 	char *print;
 	unsigned char *p;
@@ -164,16 +163,7 @@ int ipc_data_dump(struct ipc_client *client, const void *data, size_t size)
 
 		*print = '\0';
 
-		/* Escape string */
-		j = 0;
-		for (i = 0; i < sizeof(string); i++) {
-			if (string[i] == '%')
-				final[j++] = string[i];
-
-			final[j++] = string[i];
-		}
-
-		ipc_client_log(client, final);
+		ipc_client_log(client, "%s", string);
 	}
 
 	return 0;
@@ -191,7 +181,7 @@ void ipc_client_log_send(struct ipc_client *client, struct ipc_message *message,
 		ipc_client_log(client, "%s: Sent FMT message", prefix);
 		ipc_client_log(
 			client,
-			"%s: Message: mseq=0x%02x, command=%s, type=%s, size=%d",
+			"%s: Message: mseq=0x%02x, command=%s, type=%s, size=%zu",
 			prefix, message->mseq,
 			ipc_command_string(message->command),
 			ipc_request_type_string(message->type),
@@ -214,7 +204,7 @@ void ipc_client_log_send(struct ipc_client *client, struct ipc_message *message,
 		ipc_client_log(client, "\n");
 		ipc_client_log(client, "%s: Sent RFS message", prefix);
 		ipc_client_log(client,
-			       "%s: Message: mseq=0x%02x, command=%s, size=%d",
+			       "%s: Message: mseq=0x%02x, command=%s, size=%zu",
 			       prefix, message->mseq,
 			       ipc_command_string(message->command),
 			       message->size);
@@ -247,7 +237,7 @@ void ipc_client_log_recv(struct ipc_client *client, struct ipc_message *message,
 		ipc_client_log(client, "%s: Received FMT message", prefix);
 		ipc_client_log(
 			client,
-			"%s: Message: aseq=0x%02x, command=%s, type=%s, size=%d",
+			"%s: Message: aseq=0x%02x, command=%s, type=%s, size=%zu",
 			prefix, message->aseq,
 			ipc_command_string(message->command),
 			ipc_response_type_string(message->type),
@@ -270,7 +260,7 @@ void ipc_client_log_recv(struct ipc_client *client, struct ipc_message *message,
 		ipc_client_log(client, "\n");
 		ipc_client_log(client, "%s: Received RFS message", prefix);
 		ipc_client_log(client,
-			       "%s: Message: aseq=0x%02x, command=%s, size=%d",
+			       "%s: Message: aseq=0x%02x, command=%s, size=%zu",
 			       prefix, message->aseq,
 			       ipc_command_string(message->command),
 			       message->size);
