@@ -320,7 +320,7 @@ int ipc_gprs_set_apn_info_setup(struct ipc_gprs_set_apn_info_data *data,
 				unsigned char profile_id, const char *name,
 				unsigned char protocol, const char *apn,
 				const char *username, const char *password,
-				unsigned char auth)
+				unsigned char auth, unsigned char pcscf)
 {
 	if (data == NULL || name == NULL || apn == NULL ||
 	    strlen(name) >= sizeof(data->name) ||
@@ -333,13 +333,13 @@ int ipc_gprs_set_apn_info_setup(struct ipc_gprs_set_apn_info_data *data,
 	data->profile_id = profile_id;
 	strcpy(data->name, name);
 	data->protocol = protocol;
-	data->protocol_roaming = protocol;
 	strcpy(data->apn, apn);
 	if (username)
 		strcpy(data->username, username);
 	if (password)
 		strcpy(data->password, password);
 	data->auth = auth;
+	data->pcscf = pcscf;
 
 	return 0;
 }

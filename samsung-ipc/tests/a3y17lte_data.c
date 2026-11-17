@@ -388,16 +388,19 @@ int test_shannon_set_apn_info(__attribute__((unused))
 	struct ipc_gprs_set_apn_info_data data;
 	const unsigned char *b = (const unsigned char *) &data;
 
-	CHECK(ipc_gprs_set_apn_info_setup(&data, 2, "lte_ims", 3, "ims",
-					  NULL, NULL, 0) == 0);
-	CHECK(b[AT(7)] == 2);
+	CHECK(ipc_gprs_set_apn_info_setup(&data, IPC_GPRS_PROFILE_IMS,
+					  "lte_ims", IPC_GPRS_PDP_TYPE_IPV6,
+					  "ims", NULL, NULL,
+					  IPC_GPRS_PROFILE_AUTH_NONE,
+					  IPC_GPRS_PCSCF_REQUEST_IPV6) == 0);
+	CHECK(b[AT(7)] == 1);
 	CHECK(!strcmp((const char *) &b[AT(8)], "lte_ims"));
-	CHECK(b[AT(0x1c)] == 3);
+	CHECK(b[AT(0x1c)] == 5);
 	CHECK(!strcmp((const char *) &b[AT(0x1d)], "ims"));
 	CHECK(b[AT(0x82)] == 0 && b[AT(0xa2)] == 0);
-	CHECK(b[AT(0xc3)] == 3);
+	CHECK(b[AT(0xc2)] == 0 && b[AT(0xc3)] == 2 && b[AT(0xc4)] == 0);
 	CHECK(ipc_gprs_set_apn_info_setup(&data, 0, "a_name_that_is_too_long",
-					  3, "x", NULL, NULL, 0) < 0);
+					  3, "x", NULL, NULL, 0, 0) < 0);
 
 	return 0;
 }

@@ -218,20 +218,48 @@ struct ipc_gprs_define_pdp_context_ext_data {
 	unsigned char pcscf;		/* IPC_GPRS_PCSCF_REQUEST_* */
 } __attribute__((__packed__));
 
-/* IPC_GPRS_SET_APN_INFO: one data profile */
+/*
+ * IPC_GPRS_PDP_CONTEXT (set): on Shannon the first byte ("enable") is the
+ * activation mode, as the stock RIL sets it (ContextActivationDca::
+ * ActivateContext). The modem marks the context by it: only a context
+ * activated as IMS is the IMS PDN that the voice engine takes (IPC_IMS_PDN
+ * finds it by the lte_ims profile name and this mark). Credentials go with
+ * the plain activation only.
+ */
+#define IPC_GPRS_PDP_CONTEXT_DEACTIVATE				0x00
+#define IPC_GPRS_PDP_CONTEXT_ACTIVATE				0x01
+#define IPC_GPRS_PDP_CONTEXT_ACTIVATE_IMS			0x03
+#define IPC_GPRS_PDP_CONTEXT_ACTIVATE_EMERGENCY			0x04
+
+/*
+ * IPC_GPRS_SET_APN_INFO: one data profile. The stock RIL sends one per profile
+ * the framework gives it (IpcTxSetDataProfile); the modem's voice engine finds
+ * the IMS PDN by this name (IPC_IMS_PDN).
+ */
 #define IPC_GPRS_PROFILE_NAME_MAX				20
 
+/* Profile ids (stock ConvertProfileId from the Android profile type) */
+#define IPC_GPRS_PROFILE_IMS					0x01
+#define IPC_GPRS_PROFILE_FOTA					0x02
+#define IPC_GPRS_PROFILE_DEFAULT				0x03
+#define IPC_GPRS_PROFILE_CBS					0x04
+
+/* Authentication */
+#define IPC_GPRS_PROFILE_AUTH_NONE				0x00
+#define IPC_GPRS_PROFILE_AUTH_PAP				0x01
+#define IPC_GPRS_PROFILE_AUTH_CHAP				0x02
+
 struct ipc_gprs_set_apn_info_data {
-	unsigned char profile_id;
+	unsigned char profile_id;	/* IPC_GPRS_PROFILE_* */
 	char name[IPC_GPRS_PROFILE_NAME_MAX];	/* "lte_internet", "lte_ims" */
-	unsigned char protocol;		/* IPC_GPRS_PROTOCOL */
+	unsigned char protocol;		/* IPC_GPRS_PDP_TYPE_* */
 	char apn[101];
 	char username[32];
 	char password[32];
-	unsigned char auth;
-	unsigned char protocol_roaming;	/* IPC_GPRS_PROTOCOL */
+	unsigned char auth;		/* IPC_GPRS_PROFILE_AUTH_* */
+	unsigned char pcscf;		/* IPC_GPRS_PCSCF_REQUEST_*, IMS only */
 	unsigned char disabled;
-	unsigned short unknown[3];
+	unsigned short unknown[3];	/* zero */
 } __attribute__((__packed__));
 
 /*
@@ -568,7 +596,7 @@ int ipc_gprs_set_apn_info_setup(struct ipc_gprs_set_apn_info_data *data,
 				unsigned char profile_id, const char *name,
 				unsigned char protocol, const char *apn,
 				const char *username, const char *password,
-				unsigned char auth);
+				unsigned char auth, unsigned char pcscf);
 
 size_t ipc_call_list_set_size(unsigned int count, const char *const *numbers);
 
