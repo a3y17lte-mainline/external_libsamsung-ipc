@@ -54,6 +54,15 @@ int test_shannon_layout_sizes(__attribute__((unused)) struct ipc_client *client)
 	CHECK(sizeof(struct ipc_ims_channel_data) == 0x34 - 7);
 	CHECK(sizeof(struct ipc_ims_codec_data) == 0x41 - 7);
 	CHECK(sizeof(struct ipc_ims_rtp_media_data) == 0x0b - 7);
+	CHECK(sizeof(struct ipc_ims_dtmf_set_data) == 0x0d - 7);
+	CHECK(sizeof(struct ipc_ims_dtmf_exec_data) == 0x0b - 7);
+	CHECK(offsetof(struct ipc_ims_dtmf_set_data, rate) == 0x0a - 7);
+	CHECK(offsetof(struct ipc_ims_dtmf_set_data, recv_payload_type) == 0x0c - 7);
+	/* stock ImsSetCodec: packetization @0x18, mode set @0x21, rx type @0x23 */
+	CHECK(offsetof(struct ipc_ims_codec_data, packetization) == 0x18 - 7);
+	CHECK(offsetof(struct ipc_ims_codec_data, dtx) == 0x1d - 7);
+	CHECK(offsetof(struct ipc_ims_codec_data, mode_set) == 0x21 - 7);
+	CHECK(offsetof(struct ipc_ims_codec_data, rx_payload_type) == 0x23 - 7);
 	CHECK(sizeof(struct ipc_ims_pdn_data) == 0x2d - 7);
 	CHECK(sizeof(struct ipc_ims_engine_data) == 0x09 - 7);
 	CHECK(sizeof(struct ipc_ims_option_data) == 0x4e - 7);

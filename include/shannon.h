@@ -330,14 +330,14 @@ struct ipc_ims_codec_data {
 	unsigned char max_rx_ptime;
 	unsigned char channels;
 	unsigned char fixed_rate;
-	unsigned char packetization;	/* octet-aligned or bandwidth-efficient */
+	unsigned char packetization;	/* AMR: octet-align (1) or not (0) */
 	unsigned char unknown1[4];
 	unsigned char dtx;
 	unsigned char red_level;
 	unsigned char red_payload_type;
 	unsigned char unknown2;
-	unsigned short mode_set;
-	unsigned char unknown3;
+	unsigned short mode_set;	/* bit n: mode n allowed; 0: no mode-set */
+	unsigned char rx_payload_type;	/* the payload type we receive */
 	unsigned char evs_dtx_recv;
 	unsigned char evs_ch_aware_recv;
 	unsigned char evs_mode_switch;
@@ -380,11 +380,43 @@ struct ipc_ims_codec_data {
 #define IPC_IMS_BITRATE_AMR_WB_23050				0x00020000
 #define IPC_IMS_BITRATE_AMR_WB_23850				0x00040000
 
+#define IPC_IMS_RTP_MEDIA_START					0x01
+#define IPC_IMS_RTP_MEDIA_STOP					0x02
+#define IPC_IMS_RTP_MEDIA_MODIFY				0x03
+
+#define IPC_IMS_RTP_MEDIA_HELD					0x00
+#define IPC_IMS_RTP_MEDIA_SENDRECV				0x03
+
 struct ipc_ims_rtp_media_data {
-	unsigned char operation;
+	unsigned char operation;	/* IPC_IMS_RTP_MEDIA_START... */
 	unsigned char channel;
-	unsigned char status;
-	unsigned char unknown;
+	unsigned char status;		/* IPC_IMS_RTP_MEDIA_HELD, _SENDRECV */
+	unsigned char ipv6;		/* the SDP address is IPv6 */
+} __attribute__((__packed__));
+
+/*
+ * IPC_IMS_DTMF: SET gives a channel its telephone-event payload types
+ * (stock SAE_SetDTMFOptions: "sndPayload rcvPayload" and the codec's
+ * clock rate), EXEC sends one event (RFC 4733 code)
+ */
+struct ipc_ims_dtmf_set_data {
+	unsigned char channel;
+	unsigned char send_payload_type;
+	unsigned char zero;
+	unsigned short rate;
+	unsigned char recv_payload_type;
+} __attribute__((__packed__));
+
+#define IPC_IMS_DTMF_MODE_SINGLE				0x00
+#define IPC_IMS_DTMF_MODE_CONTINUOUS				0x01
+#define IPC_IMS_DTMF_START					0x01
+#define IPC_IMS_DTMF_STOP					0x02
+
+struct ipc_ims_dtmf_exec_data {
+	unsigned char channel;
+	unsigned char code;
+	unsigned char mode;		/* IPC_IMS_DTMF_MODE_* */
+	unsigned char operation;	/* IPC_IMS_DTMF_START, _STOP */
 } __attribute__((__packed__));
 
 /*
@@ -449,12 +481,26 @@ struct ipc_ims_engine_data {
 	unsigned char mode;		/* passed through by the stock stack */
 } __attribute__((__packed__));
 
-/* Notifications */
+/*
+ * Notifications. Media events (IPC_IMS_OPTION notifications), as the stock
+ * IMS stack's OemIPCHandler::ConvertIpcEventToVE maps them and CallSession
+ * handles them (events 4 and 5 go elsewhere and are not named).
+ */
+#define IPC_IMS_MEDIA_RTP_TIMEOUT				0x01
+#define IPC_IMS_MEDIA_RTCP_TIMEOUT				0x02
+#define IPC_IMS_MEDIA_BITRATE_CHANGE				0x03
+#define IPC_IMS_MEDIA_FIRST_RTP					0x06
+#define IPC_IMS_MEDIA_RTP_RESUMED				0x07
+#define IPC_IMS_MEDIA_RTCP_RESUMED				0x08
+#define IPC_IMS_MEDIA_STATISTICS				0x09
+
 struct ipc_ims_media_event_header {
-	unsigned char event;
+	unsigned char event;		/* IPC_IMS_MEDIA_* */
 	unsigned char channel;
 } __attribute__((__packed__));
 
+/* Stock treats 1 and 2 alike: the bearer is there (its QoS is reserved) */
+#define IPC_IMS_BEARER_ALLOCATED				0x01
 #define IPC_IMS_BEARER_ADDED					0x02
 #define IPC_IMS_BEARER_RELEASED					0x03
 #define IPC_IMS_BEARER_FILTERS_MAX				16
