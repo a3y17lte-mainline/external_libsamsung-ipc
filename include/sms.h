@@ -189,6 +189,46 @@ struct ipc_sms_mem_status_data {
 } __attribute__((__packed__));
 
 /*
+ * Cell broadcast. A page arrives as IPC_SMS_CBS_MSG: its format, its
+ * length and the page as the network sent it (3GPP TS 23.041 9.4). The
+ * configuration (IPC_SMS_CBS_CFG set) chooses channels: all normal ones, a
+ * list, and the warning channels (ETWS, CMAS, EU-Alert: 0x1100-0x18ff).
+ */
+#define IPC_SMS_CBS_TYPE_GSM					0x01
+#define IPC_SMS_CBS_TYPE_UMTS					0x02
+
+#define IPC_SMS_CBS_ENABLE					0x01
+#define IPC_SMS_CBS_DISABLE					0x02
+
+#define IPC_SMS_CBS_SELECT_ALL					0x01
+#define IPC_SMS_CBS_SELECT_LIST				0x02
+#define IPC_SMS_CBS_SELECT_ALL_NORMAL				0x10
+#define IPC_SMS_CBS_SELECT_ALL_WARNINGS			0x20
+#define IPC_SMS_CBS_SELECT_WARNINGS				0x80
+
+#define IPC_SMS_CBS_LIST_MAX					50
+
+struct ipc_sms_cbs_msg_header {
+	unsigned char type;				/* IPC_SMS_CBS_TYPE */
+	unsigned char length;
+} __attribute__((__packed__));
+
+/* Followed by count message identifiers, big endian */
+struct ipc_sms_cbs_cfg_header {
+	unsigned char enable;				/* IPC_SMS_CBS_ENABLE */
+	unsigned char selection;			/* IPC_SMS_CBS_SELECT */
+	unsigned char count;
+} __attribute__((__packed__));
+
+/* Activation is a configuration message of its own shape */
+struct ipc_sms_cbs_activation_data {
+	unsigned char enable;				/* IPC_SMS_CBS_ENABLE */
+	unsigned char unknown1;			/* 1 */
+	unsigned char unknown2;			/* 10 */
+	unsigned char unknown3[40];			/* 0xff */
+} __attribute__((__packed__));
+
+/*
  * Helpers
  */
 
