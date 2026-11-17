@@ -213,6 +213,21 @@ int test_shannon_ims_auth(__attribute__((unused)) struct ipc_client *client)
 	CHECK(ipc_sec_ims_auth_response_parse(response, 2, &result) == 0);
 	CHECK(result.status == 2 && result.count == 0);
 
+	/* Synchronisation failure: AUTS (14 bytes) alone, or with empty
+	 * values after it as the stock RIL reads them */
+	memset(response, 0, sizeof(response));
+	response[1] = 4;
+	response[2] = 14;
+	memset(&response[3], 0xdd, 14);
+	CHECK(ipc_sec_ims_auth_response_parse(response, 17, &result) == 0);
+	CHECK(result.status == 4 && result.count == 1);
+	CHECK(result.length[0] == 14 && result.value[0][13] == 0xdd);
+	CHECK(ipc_sec_ims_auth_response_parse(response, 19, &result) == 0);
+	CHECK(result.count == 3 && result.length[1] == 0);
+	/* A success needs every value */
+	response[1] = 0;
+	CHECK(ipc_sec_ims_auth_response_parse(response, 17, &result) < 0);
+
 	return 0;
 }
 

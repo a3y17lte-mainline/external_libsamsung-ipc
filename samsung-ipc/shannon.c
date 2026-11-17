@@ -171,6 +171,9 @@ int ipc_sec_ims_auth_response_parse(const void *data, size_t size,
 	end = (const unsigned char *) data + size;
 
 	for (i = 0; i < count; i++) {
+		/* A synchronisation failure needs only AUTS, the first value */
+		if (p == end && i > 0 && header->status >= 4)
+			break;
 		if (p >= end || (size_t) (end - p - 1) < *p)
 			return -1;
 
@@ -178,7 +181,7 @@ int ipc_sec_ims_auth_response_parse(const void *data, size_t size,
 		result->value[i] = p + 1;
 		p += 1 + *p;
 	}
-	result->count = count;
+	result->count = i;
 
 	return 0;
 }
