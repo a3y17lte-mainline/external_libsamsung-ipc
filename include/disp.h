@@ -60,4 +60,19 @@ struct ipc_disp_rssi_info_data {
 	unsigned char rssi;
 } __attribute__((__packed__));
 
+/*
+ * The longer form Shannon modems send, as the stock RIL reads it. The LTE
+ * fields are in the units of Android's LTE signal strength.
+ */
+struct ipc_disp_rssi_info_lte_data {
+	unsigned char rssi;		/* -dBm */
+	unsigned char unknown;
+	unsigned char bit_error_rate;
+	unsigned char lte_signal;	/* 0 to 31 */
+	unsigned char lte_rsrp;		/* -dBm, 0 if unknown */
+	unsigned char lte_rsrq;		/* -dB */
+	unsigned short lte_snr;		/* 0.1 dB + 200, unknown above 500 */
+	unsigned char lte_cqi;		/* 0xff if unknown */
+} __attribute__((__packed__));
+
 #endif /* __SAMSUNG_IPC_DISP_H__ */
