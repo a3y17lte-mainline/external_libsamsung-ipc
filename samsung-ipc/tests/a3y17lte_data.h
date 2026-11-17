@@ -28,6 +28,7 @@ int test_shannon_rsim_aid_setup(struct ipc_client *client);
 int test_shannon_apdu_setup(struct ipc_client *client);
 int test_shannon_ims_auth(struct ipc_client *client);
 int test_shannon_ip_configuration(struct ipc_client *client);
+int test_shannon_net_regist(struct ipc_client *client);
 int test_shannon_call_status(struct ipc_client *client);
 int test_shannon_set_apn_info(struct ipc_client *client);
 int test_shannon_ims_channel(struct ipc_client *client);

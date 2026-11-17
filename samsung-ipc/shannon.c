@@ -187,6 +187,21 @@ int ipc_sec_ims_auth_response_parse(const void *data, size_t size,
  * Data calls
  */
 
+int ipc_net_regist_response_ext_extract(
+	const void *data, size_t size,
+	struct ipc_net_regist_response_ext_data *out)
+{
+	if (data == NULL || out == NULL ||
+	    size < sizeof(struct ipc_net_regist_response_data))
+		return -1;
+
+	/* Shorter forms leave the LTE fields unknown */
+	memset(out, 0, sizeof(*out));
+	memcpy(out, data, size < sizeof(*out) ? size : sizeof(*out));
+
+	return 0;
+}
+
 int ipc_gprs_call_status_ext_extract(const void *data, size_t size,
 				     struct ipc_gprs_call_status_ext_data *out)
 {

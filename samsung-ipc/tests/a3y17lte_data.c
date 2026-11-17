@@ -24,6 +24,7 @@
  * payload offset is 7 less.
  */
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -55,6 +56,20 @@ int test_shannon_layout_sizes(__attribute__((unused)) struct ipc_client *client)
 	CHECK(sizeof(struct ipc_ims_rtp_media_data) == 0x0b - 7);
 	CHECK(sizeof(struct ipc_ims_pdn_data) == 0x2d - 7);
 	CHECK(sizeof(struct ipc_ims_engine_data) == 0x09 - 7);
+	CHECK(sizeof(struct ipc_ims_option_data) == 0x4e - 7);
+	CHECK(offsetof(struct ipc_ims_option_data, rtp_timeout) == AT(0x0c));
+	CHECK(offsetof(struct ipc_ims_option_data, srtp_key) == AT(0x18));
+	CHECK(offsetof(struct ipc_ims_option_data, av_sync) == AT(0x36));
+	CHECK(offsetof(struct ipc_ims_option_data, rtcp_rs) == AT(0x3a));
+	CHECK(offsetof(struct ipc_ims_option_data, xr_blocks) == AT(0x42));
+	CHECK(offsetof(struct ipc_ims_option_data, xr_params) == AT(0x45));
+	CHECK(offsetof(struct ipc_ims_option_data, echolocate) == AT(0x4d));
+	CHECK(offsetof(struct ipc_net_regist_response_ext_data, tac) ==
+	      AT(0x12));
+	CHECK(offsetof(struct ipc_net_regist_response_ext_data, volte) ==
+	      AT(0x14));
+	CHECK(offsetof(struct ipc_net_regist_response_ext_data, pci) ==
+	      AT(0x17));
 	CHECK(sizeof(struct ipc_ims_dedicated_bearer_header) == 0x1a - 7);
 	CHECK(sizeof(struct ipc_ims_bearer_filter) == 26);
 
@@ -249,6 +264,37 @@ int test_shannon_ip_configuration(__attribute__((unused))
 	CHECK(config.pcscf_ipv6_count == 1);
 
 	CHECK(ipc_gprs_ip_configuration_ext_parse(p, 0x20, &config) < 0);
+
+	return 0;
+}
+
+int test_shannon_net_regist(__attribute__((unused)) struct ipc_client *client)
+{
+	unsigned char p[0x19 - 7];
+	struct ipc_net_regist_response_ext_data reg;
+
+	memset(p, 0, sizeof(p));
+	p[AT(7)] = 0x0a;		/* LTE */
+	p[AT(9)] = 0x02;		/* home */
+	p[AT(0x12)] = 0x34;
+	p[AT(0x13)] = 0x12;
+	p[AT(0x14)] = IPC_NET_LTE_SUPPORTED;
+	p[AT(0x15)] = IPC_NET_LTE_NOT_SUPPORTED;
+	p[AT(0x17)] = 0x2c;
+	p[AT(0x18)] = 0x01;
+
+	CHECK(ipc_net_regist_response_ext_extract(p, sizeof(p), &reg) == 0);
+	CHECK(reg.act == 0x0a && reg.status == 0x02);
+	CHECK(reg.tac == 0x1234);
+	CHECK(reg.volte == IPC_NET_LTE_SUPPORTED);
+	CHECK(reg.ims_emergency == IPC_NET_LTE_NOT_SUPPORTED);
+	CHECK(reg.pci == 0x12c);
+
+	/* The plain form: no LTE fields */
+	CHECK(ipc_net_regist_response_ext_extract(
+		p, sizeof(struct ipc_net_regist_response_data), &reg) == 0);
+	CHECK(reg.volte == 0 && reg.tac == 0);
+	CHECK(ipc_net_regist_response_ext_extract(p, 3, &reg) < 0);
 
 	return 0;
 }

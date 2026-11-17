@@ -73,6 +73,7 @@ static void fuzz_helpers(const void *data, size_t size)
 {
 	struct ipc_gprs_ip_configuration_ext config;
 	struct ipc_gprs_call_status_ext_data status;
+	struct ipc_net_regist_response_ext_data reg;
 	struct ipc_sec_ims_auth_result auth;
 	volatile unsigned char sink = 0;
 	unsigned int i, j;
@@ -157,6 +158,8 @@ static void fuzz_helpers(const void *data, size_t size)
 		sink += config.cid;
 	if (ipc_gprs_call_status_ext_extract(data, size, &status) == 0)
 		sink += status.cid;
+	if (ipc_net_regist_response_ext_extract(data, size, &reg) == 0)
+		sink += reg.volte;
 	sink += ipc_ims_dedicated_bearer_filter_count(data, size);
 
 	/* NV items the modem writes */

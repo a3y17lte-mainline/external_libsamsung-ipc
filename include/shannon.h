@@ -206,14 +206,51 @@ struct ipc_gprs_set_apn_info_data {
  * IMS state and calls
  */
 
-/* IPC_IMS_REG_STATE: the AP's IMS registration, for the modem */
+/*
+ * IPC_IMS_REG_STATE: the AP's IMS registration, for the modem. The stock RIL
+ * sends it on every change of the IMS registration.
+ */
+#define IPC_IMS_REG_STATUS_NOT_REGISTERED			0x00
+#define IPC_IMS_REG_STATUS_REGISTERED				0x01
+
+/* Services registered, as the stock RIL tests them */
+#define IPC_IMS_FEATURE_VOICE					0x01
+#define IPC_IMS_FEATURE_SMS					0x02
+#define IPC_IMS_FEATURE_VIDEO					0x08
+
+/* Access network of the registration (from the RIL's radio technology) */
+#define IPC_IMS_RAT_IWLAN					0x05
+#define IPC_IMS_RAT_LTE						0x06
+
 struct ipc_ims_reg_state_data {
-	unsigned char status;
-	unsigned char features;
-	unsigned char network_type;
+	unsigned char status;		/* IPC_IMS_REG_STATUS_* */
+	unsigned char features;		/* IPC_IMS_FEATURE_* */
+	unsigned char network_type;	/* 0 or 1; meaning not named in stock */
 	unsigned char ecmp;
-	unsigned char rat;
+	unsigned char rat;		/* IPC_IMS_RAT_* */
+	unsigned char reason;
+} __attribute__((__packed__));
+
+/*
+ * IPC_NET_REGIST as Shannon sends it: struct ipc_net_regist_response_data,
+ * then the LTE fields. The support values are 1 yes, 2 no, other unknown.
+ */
+#define IPC_NET_LTE_SUPPORTED					0x01
+#define IPC_NET_LTE_NOT_SUPPORTED				0x02
+
+struct ipc_net_regist_response_ext_data {
+	unsigned char act;		/* IPC_NET_ACCESS_TECHNOLOGY */
+	unsigned char domain;		/* IPC_NET_SERVICE_DOMAIN */
+	unsigned char status;		/* IPC_NET_REGISTRATION_STATUS */
+	unsigned char edge;
+	unsigned short lac;
+	unsigned int cid;
+	unsigned char fail_cause;
+	unsigned short tac;
+	unsigned char volte;		/* voice over PS: IPC_NET_LTE_* */
+	unsigned char ims_emergency;	/* IMS emergency calls: IPC_NET_LTE_* */
 	unsigned char unknown;
+	unsigned short pci;		/* physical cell id */
 } __attribute__((__packed__));
 
 /* IPC_CALL_SRVCC, both directions */
@@ -285,6 +322,32 @@ struct ipc_ims_codec_data {
 	unsigned char evs_default_bw;
 } __attribute__((__packed__));
 
+/* Codec ids of IPC_IMS_CODEC */
+#define IPC_IMS_CODEC_PCMU					0x01
+#define IPC_IMS_CODEC_PCMA					0x02
+#define IPC_IMS_CODEC_AMR					0x06
+#define IPC_IMS_CODEC_AMR_WB					0x07
+#define IPC_IMS_CODEC_EVS					0x0D
+
+/* Bit rates of IPC_IMS_CODEC: one bit per rate */
+#define IPC_IMS_BITRATE_AMR_4750				0x00000004
+#define IPC_IMS_BITRATE_AMR_5150				0x00000008
+#define IPC_IMS_BITRATE_AMR_5900				0x00000010
+#define IPC_IMS_BITRATE_AMR_6700				0x00000020
+#define IPC_IMS_BITRATE_AMR_7400				0x00000040
+#define IPC_IMS_BITRATE_AMR_7950				0x00000080
+#define IPC_IMS_BITRATE_AMR_10200				0x00000100
+#define IPC_IMS_BITRATE_AMR_12200				0x00000200
+#define IPC_IMS_BITRATE_AMR_WB_6600				0x00000400
+#define IPC_IMS_BITRATE_AMR_WB_8850				0x00000800
+#define IPC_IMS_BITRATE_AMR_WB_12650				0x00001000
+#define IPC_IMS_BITRATE_AMR_WB_14250				0x00002000
+#define IPC_IMS_BITRATE_AMR_WB_15850				0x00004000
+#define IPC_IMS_BITRATE_AMR_WB_18250				0x00008000
+#define IPC_IMS_BITRATE_AMR_WB_19850				0x00010000
+#define IPC_IMS_BITRATE_AMR_WB_23050				0x00020000
+#define IPC_IMS_BITRATE_AMR_WB_23850				0x00040000
+
 struct ipc_ims_rtp_media_data {
 	unsigned char operation;
 	unsigned char channel;
@@ -292,17 +355,66 @@ struct ipc_ims_rtp_media_data {
 	unsigned char unknown;
 } __attribute__((__packed__));
 
+/*
+ * IPC_IMS_OPTION: a channel's RTP/RTCP options. Only the fields whose flag is
+ * set count; the stock stack sends the block once per change.
+ */
+#define IPC_IMS_OPTION_RTCP					0x0001
+#define IPC_IMS_OPTION_RTCP_ON_CALL				0x0002
+#define IPC_IMS_OPTION_RTP_TIMEOUT				0x0004
+#define IPC_IMS_OPTION_RTCP_TIMEOUT				0x0008
+#define IPC_IMS_OPTION_SRTP					0x0020
+#define IPC_IMS_OPTION_AV_SYNC					0x0040
+#define IPC_IMS_OPTION_CIQ					0x0080
+#define IPC_IMS_OPTION_BITRATE_NOTIFICATION			0x0100
+#define IPC_IMS_OPTION_RTCP_XR					0x0800
+#define IPC_IMS_OPTION_ECHOLOCATE				0x2000
+
+#define IPC_IMS_SRTP_KEY_MAX					30
+
+struct ipc_ims_option_data {
+	unsigned char channel;
+	unsigned short flags;		/* IPC_IMS_OPTION_* */
+	unsigned char rtcp;
+	unsigned char rtcp_on_call;
+	unsigned int rtp_timeout;
+	unsigned int rtcp_timeout;
+	unsigned char unknown1;
+	unsigned char srtp_profile;
+	unsigned char srtp_direction;
+	unsigned char srtp_key_length;
+	unsigned char srtp_key[IPC_IMS_SRTP_KEY_MAX];
+	unsigned char av_sync;
+	unsigned char ciq;
+	unsigned char unknown2[2];
+	unsigned int rtcp_rs;		/* RTCP bandwidth, senders */
+	unsigned int rtcp_rr;		/* RTCP bandwidth, receivers */
+	unsigned char xr_blocks;
+	unsigned char xr_stat_flags;
+	unsigned char xr_rtt_mode;
+	unsigned short xr_params[4];
+	unsigned char echolocate;
+} __attribute__((__packed__));
+
+/*
+ * IPC_IMS_PDN: the IMS PDN's address. The name is the modem's data profile
+ * name ("lte_" + the PDN's name, e.g. "lte_ims"), not a network interface.
+ */
 struct ipc_ims_pdn_data {
 	unsigned char family;		/* IPC_IMS_ADDRESS_* */
 	unsigned char address[16];
 	unsigned int ifname_length;
-	char ifname[16];
+	char ifname[16];		/* the profile name, see above */
 	unsigned char cid;
 } __attribute__((__packed__));
 
+/* IPC_IMS_ENGINE: the voice engine on or off, once per SIM at start */
+#define IPC_IMS_ENGINE_OFF					0x00
+#define IPC_IMS_ENGINE_ON					0x01
+
 struct ipc_ims_engine_data {
-	unsigned char engine;
-	unsigned char state;
+	unsigned char engine;		/* IPC_IMS_ENGINE_* */
+	unsigned char mode;		/* passed through by the stock stack */
 } __attribute__((__packed__));
 
 /* Notifications */
@@ -363,6 +475,9 @@ int ipc_sec_ims_auth_request_setup(void *buffer, size_t size,
 int ipc_sec_ims_auth_response_parse(const void *data, size_t size,
 				    struct ipc_sec_ims_auth_result *result);
 
+int ipc_net_regist_response_ext_extract(
+	const void *data, size_t size,
+	struct ipc_net_regist_response_ext_data *out);
 int ipc_gprs_call_status_ext_extract(const void *data, size_t size,
 				     struct ipc_gprs_call_status_ext_data *out);
 int ipc_gprs_ip_configuration_ext_parse(

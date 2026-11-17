@@ -85,6 +85,10 @@ static struct test tests[] = {
 		test_shannon_ip_configuration
 	},
 	{
+		"shannon_net_regist",
+		test_shannon_net_regist
+	},
+	{
 		"shannon_call_status",
 		test_shannon_call_status
 	},
