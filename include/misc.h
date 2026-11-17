@@ -33,6 +33,9 @@
 #define IPC_MISC_ME_SN						0x0A03
 #define IPC_MISC_TIME_INFO					0x0A05
 #define IPC_MISC_DEBUG_LEVEL					0x0A0C
+/* An event (no answer): whether the screen is on. The stock RIL of the
+ * Galaxy A3 2017 sends it on every screen change */
+#define IPC_MISC_SCREEN_STATE					0x0A0F
 
 /*
  * Values
@@ -88,5 +91,9 @@ struct ipc_misc_time_info_data {
 int ipc_misc_me_version_setup(struct ipc_misc_me_version_request_data *data);
 char *ipc_misc_me_imsi_imsi_extract(const void *data, size_t size);
 char *ipc_misc_me_sn_extract(const struct ipc_misc_me_sn_response_data *data);
+
+struct ipc_misc_screen_state_data {
+	unsigned char on;
+} __attribute__((__packed__));
 
 #endif /*  __SAMSUNG_IPC_MISC_H__ */
