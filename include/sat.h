@@ -39,6 +39,47 @@
 #define IPC_SAT_IMAGE_CLUT					0x0E0B
 #define IPC_SAT_SETUP_CALL_PROCESSING				0x0E0C
 
+/*
+ * Values
+ */
+
+#define IPC_SAT_TERMINAL_RESPONSE_MAX				0x200
+#define IPC_SAT_ENVELOPE_MAX					0x100
+
+/*
+ * Structures, as the stock RIL of the Galaxy A3 2017 builds and reads them
+ */
+
+/* IPC_SAT_PROACTIVE_CMD from the modem (an indication): the command follows */
+struct ipc_sat_proactive_cmd_header {
+	unsigned short length;
+} __attribute__((__packed__));
+
+/* The terminal response: IPC_SAT_PROACTIVE_CMD as a GET, always full size */
+struct ipc_sat_terminal_response_data {
+	unsigned char length;
+	unsigned char data[IPC_SAT_TERMINAL_RESPONSE_MAX];
+} __attribute__((__packed__));
+
+/* The modem's answer to it: the card's status words */
+struct ipc_sat_result_data {
+	unsigned char sw1;
+	unsigned char sw2;
+} __attribute__((__packed__));
+
+/* IPC_SAT_ENVELOPE_CMD as an EXEC, always full size */
+struct ipc_sat_envelope_request_data {
+	unsigned char length;
+	unsigned char data[IPC_SAT_ENVELOPE_MAX];
+} __attribute__((__packed__));
+
+/* Its answer (a notification): the card's response follows */
+struct ipc_sat_envelope_response_header {
+	unsigned char sw1;
+	unsigned char sw2;
+	unsigned char length;
+} __attribute__((__packed__));
+
 #endif
 
 // vim:ts=4:sw=4:expandtab
