@@ -67,6 +67,34 @@
 #define IPC_SMS_STATUS_STO_SENT				0x04
 
 /*
+ * The first byte of incoming messages, delivery reports and the requests
+ * that name a store: the network the message belongs to. The stock RIL of
+ * the Galaxy A3 2017 sends GSM for every GSM/UMTS/LTE message.
+ */
+#define IPC_SMS_NETWORK_CDMA					0x01
+#define IPC_SMS_NETWORK_GSM					0x02
+
+/* Delivery report failures, as the stock RIL sends them */
+#define IPC_SMS_ACK_MEMORY_CAPACITY_EXCEEDED			0x8016
+#define IPC_SMS_ACK_SIM_FULL_ERROR				0x8081
+
+/*
+ * Send results (ipc_sms_send_msg_response_data.ack): 0, an RP cause
+ * (3GPP TS 24.011 8.2.5.4) plus IPC_SMS_SEND_RESULT_RP_CAUSE, or one of the
+ * modem's own codes
+ */
+#define IPC_SMS_SEND_RESULT_RP_CAUSE				0x8000
+#define IPC_SMS_SEND_RESULT_FDN_BLOCKED			0x000C
+#define IPC_SMS_SEND_RESULT_FDN_BLOCKED_SMSC			0x000D
+
+/* IPC_SMS_MEM_STATUS: set by the AP, and sent by the modem for the SIM */
+#define IPC_SMS_MEM_STATUS_AVAILABLE				0x01
+#define IPC_SMS_MEM_STATUS_FULL				0x02
+
+/* SIM store index for "the first free record" */
+#define IPC_SMS_SIM_INDEX_ANY					0xFFFF
+
+/*
  * Structures
  */
 
@@ -85,13 +113,18 @@ struct ipc_sms_send_msg_response_data {
 } __attribute__((__packed__));
 
 struct ipc_sms_incoming_msg_header {
-	unsigned char msg_type;			/* IPC_SMS_MSG_TYPE */
+	unsigned char msg_type;			/* IPC_SMS_NETWORK */
 	unsigned char type;				/* IPC_SMS_TYPE */
 	unsigned short sim_index;
 	unsigned char id;
 	unsigned char length;
 } __attribute__((__packed__));
 
+/*
+ * Save and delete name the store by network (IPC_SMS_NETWORK) and a record
+ * index from 0 (IPC_SMS_SIM_INDEX_ANY: the first free one). The saved PDU
+ * has its SMSC address in front; the answers carry an IPC_SMS_ACK code.
+ */
 struct ipc_sms_save_msg_request_header {
 	unsigned char magic;
 	unsigned short index;
@@ -129,6 +162,30 @@ struct ipc_sms_deliver_report_response_data {
 
 struct ipc_sms_svc_center_addr_header {
 	unsigned char length;
+} __attribute__((__packed__));
+
+/*
+ * IPC_SMS_SVC_CENTER_ADDR set: the address as in a PDU (length of what
+ * follows, type of address, BCD digits), zero padded
+ */
+#define IPC_SMS_SVC_CENTER_ADDR_MAX				11
+
+struct ipc_sms_svc_center_addr_set_data {
+	unsigned char address[IPC_SMS_SVC_CENTER_ADDR_MAX];
+	unsigned char unknown;
+} __attribute__((__packed__));
+
+/*
+ * IPC_SMS_MEM_STATUS: a set from the AP has the status alone; the
+ * modem's notification names the network first
+ */
+struct ipc_sms_mem_status_request_data {
+	unsigned char status;				/* IPC_SMS_MEM_STATUS */
+} __attribute__((__packed__));
+
+struct ipc_sms_mem_status_data {
+	unsigned char network;				/* IPC_SMS_NETWORK */
+	unsigned char status;				/* IPC_SMS_MEM_STATUS */
 } __attribute__((__packed__));
 
 /*
