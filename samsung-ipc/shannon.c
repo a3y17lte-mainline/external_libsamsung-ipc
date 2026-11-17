@@ -205,6 +205,23 @@ int ipc_net_regist_response_ext_extract(
 	return 0;
 }
 
+int ipc_gprs_define_pdp_context_ext_setup(
+	struct ipc_gprs_define_pdp_context_ext_data *data, unsigned char cid,
+	unsigned char type, const char *apn, unsigned char pcscf)
+{
+	if (data == NULL || apn == NULL || strlen(apn) >= sizeof(data->apn))
+		return -1;
+
+	memset(data, 0, sizeof(*data));
+	data->enable = 1;
+	data->cid = cid;
+	data->type = type;
+	strncpy(data->apn, apn, sizeof(data->apn) - 1);
+	data->pcscf = pcscf;
+
+	return 0;
+}
+
 int ipc_gprs_call_status_ext_extract(const void *data, size_t size,
 				     struct ipc_gprs_call_status_ext_data *out)
 {

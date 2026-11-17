@@ -85,6 +85,10 @@ static struct test tests[] = {
 		test_shannon_ip_configuration
 	},
 	{
+		"shannon_define_pdp_context",
+		test_shannon_define_pdp_context
+	},
+	{
 		"shannon_net_regist",
 		test_shannon_net_regist
 	},

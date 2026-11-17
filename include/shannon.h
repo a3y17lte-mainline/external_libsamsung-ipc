@@ -186,6 +186,34 @@ struct ipc_gprs_ip_configuration_ext {
 	unsigned int mtu;		/* 0 if not given */
 };
 
+/*
+ * IPC_GPRS_DEFINE_PDP_CONTEXT as the stock RIL sends it: with the IP type,
+ * optional static addresses and whether the network should give P-CSCF
+ * addresses (for the IMS PDN), of which IP version.
+ */
+#define IPC_GPRS_PDP_TYPE_IPV4					0x02
+#define IPC_GPRS_PDP_TYPE_PPP					0x04
+#define IPC_GPRS_PDP_TYPE_IPV6					0x05
+#define IPC_GPRS_PDP_TYPE_IPV4V6				0x06
+
+#define IPC_GPRS_PCSCF_REQUEST_NONE				0x00
+#define IPC_GPRS_PCSCF_REQUEST_IPV4				0x01
+#define IPC_GPRS_PCSCF_REQUEST_IPV6				0x02
+#define IPC_GPRS_PCSCF_REQUEST_IPV4V6				0x03
+
+#define IPC_GPRS_APN_MAX					101
+
+struct ipc_gprs_define_pdp_context_ext_data {
+	unsigned char enable;
+	unsigned char cid;
+	unsigned char type;		/* IPC_GPRS_PDP_TYPE_* */
+	char apn[IPC_GPRS_APN_MAX];
+	unsigned char ipv6[16];		/* requested address, zero for any */
+	unsigned char ipv4[4];
+	unsigned short unknown;
+	unsigned char pcscf;		/* IPC_GPRS_PCSCF_REQUEST_* */
+} __attribute__((__packed__));
+
 /* IPC_GPRS_SET_APN_INFO: one data profile */
 #define IPC_GPRS_PROFILE_NAME_MAX				20
 
@@ -483,6 +511,9 @@ int ipc_gprs_call_status_ext_extract(const void *data, size_t size,
 int ipc_gprs_ip_configuration_ext_parse(
 	const void *data, size_t size,
 	struct ipc_gprs_ip_configuration_ext *config);
+int ipc_gprs_define_pdp_context_ext_setup(
+	struct ipc_gprs_define_pdp_context_ext_data *data, unsigned char cid,
+	unsigned char type, const char *apn, unsigned char pcscf);
 int ipc_gprs_set_apn_info_setup(struct ipc_gprs_set_apn_info_data *data,
 				unsigned char profile_id, const char *name,
 				unsigned char protocol, const char *apn,

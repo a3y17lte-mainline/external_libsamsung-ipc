@@ -283,6 +283,31 @@ int test_shannon_ip_configuration(__attribute__((unused))
 	return 0;
 }
 
+int test_shannon_define_pdp_context(__attribute__((unused))
+				    struct ipc_client *client)
+{
+	struct ipc_gprs_define_pdp_context_ext_data data;
+	const unsigned char *b = (const unsigned char *) &data;
+	char long_apn[IPC_GPRS_APN_MAX + 1];
+
+	CHECK(sizeof(data) == 0x86 - 7);
+	CHECK(sizeof(data) == sizeof(struct ipc_gprs_define_pdp_context_data));
+	CHECK(ipc_gprs_define_pdp_context_ext_setup(
+		&data, 3, IPC_GPRS_PDP_TYPE_IPV6, "ims",
+		IPC_GPRS_PCSCF_REQUEST_IPV6) == 0);
+	CHECK(b[AT(7)] == 1 && b[AT(8)] == 3 && b[AT(9)] == 5);
+	CHECK(!strcmp((const char *) &b[AT(0x0a)], "ims"));
+	CHECK(b[AT(0x6f)] == 0 && b[AT(0x7f)] == 0);
+	CHECK(b[AT(0x85)] == IPC_GPRS_PCSCF_REQUEST_IPV6);
+
+	memset(long_apn, 'a', sizeof(long_apn) - 1);
+	long_apn[sizeof(long_apn) - 1] = '\0';
+	CHECK(ipc_gprs_define_pdp_context_ext_setup(&data, 3, 5, long_apn,
+						    0) < 0);
+
+	return 0;
+}
+
 int test_shannon_net_regist(__attribute__((unused)) struct ipc_client *client)
 {
 	unsigned char p[0x19 - 7];
