@@ -175,7 +175,7 @@ int test_shannon_ims_auth(__attribute__((unused)) struct ipc_client *client)
 	size = ipc_sec_ims_auth_request_size(sizeof(rand), sizeof(autn));
 	CHECK(size == 2 + 16 + 1 + 16);
 	CHECK(ipc_sec_ims_auth_request_setup(request, sizeof(request),
-					     IPC_SEC_IMS_AUTH_TYPE_AKA,
+					     IPC_SEC_IMS_AUTH_TYPE_IMS,
 					     rand, sizeof(rand),
 					     autn, sizeof(autn)) == 0);
 	CHECK(request[AT(7)] == 0);
@@ -203,6 +203,23 @@ int test_shannon_ims_auth(__attribute__((unused)) struct ipc_client *client)
 	CHECK(result.length[0] == 8 && result.value[0][0] == 0xaa);
 	CHECK(result.length[1] == 16 && result.value[1][15] == 0xbb);
 	CHECK(result.length[2] == 16 && result.value[2][0] == 0xcc);
+
+	/* USIM: four values, Kc last */
+	{
+		unsigned char usim[2 + 9 + 17 + 17 + 9];
+		size_t n = 0;
+
+		memset(usim, 0, sizeof(usim));
+		usim[n++] = IPC_SEC_IMS_AUTH_TYPE_USIM;
+		usim[n++] = 0;
+		usim[n] = 8; n += 9;
+		usim[n] = 16; n += 17;
+		usim[n] = 16; n += 17;
+		usim[n] = 8; usim[n + 8] = 0xee; n += 9;
+		CHECK(ipc_sec_ims_auth_response_parse(usim, n, &result) == 0);
+		CHECK(result.count == 4 && result.length[3] == 8);
+		CHECK(result.value[3][7] == 0xee);
+	}
 
 	/* A value running past the end */
 	CHECK(ipc_sec_ims_auth_response_parse(response, sizeof(response) - 1,

@@ -127,14 +127,18 @@ struct ipc_sec_apdu_request_data {
 /*
  * Authentication with the SIM's AKA algorithm (IPC_SEC_IMS_AUTH)
  *
- * Request: type, RAND, AUTN, each value with a length byte in front.
+ * Request: type, RAND, AUTN, each value with a length byte in front. The
+ * type picks the application, as the stock RIL sets it: IMS AKA on the
+ * ISIM (only when the card has one), USIM AKA, or a GSM run (RAND only).
  * Response: type, status and the results as length-prefixed values: three
- * for type 0 (RES, CK, IK), two for type 1, four for type 2. Status 0 is
- * success; 4 and 5 also carry values (resynchronisation), 1 to 3 are
- * failures.
+ * for IMS (RES, CK, IK), four for USIM (RES, CK, IK, Kc), two for GSM (SRES,
+ * Kc). Status 0 is success; 4 and 5 are synchronisation failures with AUTS
+ * first, 1 to 3 are failures.
  */
 
-#define IPC_SEC_IMS_AUTH_TYPE_AKA				0x00
+#define IPC_SEC_IMS_AUTH_TYPE_IMS				0x00
+#define IPC_SEC_IMS_AUTH_TYPE_GSM				0x01
+#define IPC_SEC_IMS_AUTH_TYPE_USIM				0x02
 #define IPC_SEC_IMS_AUTH_VALUES_MAX				4
 
 struct ipc_sec_ims_auth_response_header {
