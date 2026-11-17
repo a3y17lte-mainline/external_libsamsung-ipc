@@ -51,6 +51,7 @@
 
 #define IPC_CALL_PREFIX_NONE					0x00
 #define IPC_CALL_PREFIX_INTL					0x11
+#define IPC_CALL_PREFIX_NATIONAL				0x21
 
 #define IPC_CALL_STATUS_DIALING				0x01
 #define IPC_CALL_STATUS_IGNORING_INCOMING_STATUS		0x02
@@ -86,6 +87,23 @@ struct ipc_call_outgoing_data {
 	unsigned char number_length;
 	unsigned char prefix;		/* IPC_CALL_PREFIX */
 	unsigned char number[86];
+} __attribute__((__packed__));
+
+/*
+ * The call as the stock RIL of the Galaxy A3 2017 places it
+ * (IpcTxCallOriginate): the number as dialled, at most 82 characters and
+ * with its '+', prefix IPC_CALL_PREFIX_INTL for a number with a '+' and
+ * IPC_CALL_PREFIX_NATIONAL otherwise, and a category byte after the number.
+ * An emergency call has the call type 0x0106 (IPC_CALL_OUTGOING_EMERGENCY
+ * in the byte before IPC_CALL_TYPE_VOICE) and the 3GPP TS 24.008 emergency
+ * service category; a normal call 0x0100 and category 0.
+ */
+#define IPC_CALL_OUTGOING_EMERGENCY				0x06
+#define IPC_CALL_OUTGOING_NUMBER_MAX				0x52
+
+struct ipc_call_originate_data {
+	struct ipc_call_outgoing_data call;
+	unsigned char category;
 } __attribute__((__packed__));
 
 struct ipc_call_incoming_data {
